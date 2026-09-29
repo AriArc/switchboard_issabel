@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "MOCK_PBX=1 node server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "check-cdr": "node server/check-cdr.js"
   },
   "engines": {
     "node": ">=18"

@@ -81,6 +81,7 @@ class MysqlCdr {
     });
     if (!/^\w+$/.test(dbConfig.table)) throw new Error('CDR_DB_TABLE inválido');
     this.table = dbConfig.table;
+    this.dbConfig = { ...dbConfig, password: undefined };
   }
 
   async history(extension, query) {
@@ -210,4 +211,36 @@ class MockCdr {
   }
 }
 
-module.exports = { MysqlCdr, MockCdr, shapeRecords, normalizeQuery, clidName };
+/** Traduz erros de conexão/consulta ao MariaDB em uma causa legível (sem expor senhas). */
+function describeCdrError(err, db = {}) {
+  const where = db.socketPath ? `socket ${db.socketPath}` : `${db.host}:${db.port}`;
+  const user = `'${db.user}'`;
+  switch (err && err.code) {
+    case 'ER_ACCESS_DENIED_ERROR':
+      return `acesso negado para o usuário ${user} — confira CDR_DB_USER/CDR_DB_PASSWORD e o host do usuário no MariaDB ('127.0.0.1' via TCP ou 'localhost' via socket)`;
+    case 'ER_HOST_NOT_PRIVILEGED':
+      return `o MariaDB não aceita o usuário ${user} a partir deste host — crie o usuário para '127.0.0.1'`;
+    case 'ER_DBACCESS_DENIED_ERROR':
+    case 'ER_TABLEACCESS_DENIED_ERROR':
+    case 'ER_COLUMNACCESS_DENIED_ERROR':
+      return `o usuário ${user} não tem permissão de leitura — falta: GRANT SELECT ON ${db.database}.${db.table} TO ...`;
+    case 'ER_BAD_DB_ERROR':
+      return `o banco '${db.database}' não existe — confira CDR_DB_NAME`;
+    case 'ER_NO_SUCH_TABLE':
+      return `a tabela '${db.database}.${db.table}' não existe — confira CDR_DB_TABLE`;
+    case 'ER_BAD_FIELD_ERROR':
+      return `a tabela de CDR não tem uma coluna esperada (${err.sqlMessage || err.message})`;
+    case 'ECONNREFUSED':
+      return `o MariaDB recusou a conexão em ${where} — ele pode estar sem TCP (skip-networking); use CDR_DB_SOCKET=/var/lib/mysql/mysql.sock`;
+    case 'ENOENT':
+      return `socket do MariaDB não encontrado em ${db.socketPath} — confira CDR_DB_SOCKET`;
+    case 'ETIMEDOUT':
+    case 'ENOTFOUND':
+    case 'EHOSTUNREACH':
+      return `não foi possível alcançar o MariaDB em ${where} (${err.code})`;
+    default:
+      return `${(err && err.code) || 'erro'}: ${(err && (err.sqlMessage || err.message)) || 'desconhecido'}`;
+  }
+}
+
+module.exports = { MysqlCdr, describeCdrError, MockCdr, shapeRecords, normalizeQuery, clidName };

@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const { sign, userFromRequest, sessionCookie, COOKIE } = require('./auth');
 const { publicUser } = require('./users');
+const { describeCdrError } = require('./cdr');
 
 const NUMBER_RE = /^\+?[0-9*#]{2,32}$/;
 
@@ -98,8 +99,9 @@ function createApp({ config, users, pbx, cdr = null }) {
       res.json({ extension, ...result });
     } catch (err) {
       if (!err.status) {
-        console.error('[cdr]', err.message);
-        return next(httpError(502, 'Não foi possível consultar o histórico no banco de CDR.'));
+        const reason = describeCdrError(err, cdr && cdr.dbConfig);
+        console.error('[cdr]', reason);
+        return next(httpError(502, `Não foi possível consultar o histórico: ${reason}.`));
       }
       next(err);
     }

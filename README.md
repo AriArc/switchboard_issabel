@@ -219,11 +219,29 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | Topo do painel mostra "PABX desconectado" | `journalctl -u switchboard`; usuário/senha do AMI; `permit = 127.0.0.1` e `manager reload` |
 | Painel sem ramais ou sem nomes | Permissões `command` e `reporting` no usuário AMI; `HINT_CONTEXT=ext-local` |
 | Click-to-call não toca o ramal | `CHANNEL_TECH=PJSIP`; ramal registrado (`asterisk -rx "pjsip show contacts"`) |
-| Aba Histórico: "Não foi possível consultar" | Usuário `'switchboard'@'127.0.0.1'` e senha do CDR. Se o MariaDB não escuta em TCP, use `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` e crie o usuário como `'switchboard'@'localhost'` |
+| Aba Histórico: "Não foi possível consultar" | A mensagem mostra a causa. Para diagnosticar pelo terminal: `cd /opt/switchboard_issabel && sudo -u switchboard npm run check-cdr -- <ramal>` (veja abaixo) |
 | Navegador mostra "Não seguro" | Esperado: o acesso é HTTP, sem certificado |
 | Erro "Sua conexão não é particular" | O endereço foi digitado com `https://`; use `http://IP:8443` |
 | `http://IP:8443` não abre | `systemctl status switchboard`; regra da 8443 no firewall do Issabel / firewalld / painel da VPS |
 | Serviço não sobe com `EADDRINUSE` | Outro programa usa a 8443 (ex.: o Apache do passo 6): `ss -ltnp \| grep 8443` |
+
+### Diagnóstico do Histórico (CDR)
+
+```bash
+cd /opt/switchboard_issabel
+sudo -u switchboard npm run check-cdr -- 3601     # troque 3601 por um ramal
+```
+
+O comando usa as configurações do `.env`, testa a conexão com o MariaDB, mostra as permissões do usuário
+e as últimas ligações do ramal. Causas comuns:
+
+- **acesso negado**: senha diferente da usada no `CREATE USER`, ou usuário criado para outro host.
+  Recrie com `'switchboard'@'127.0.0.1'` (conexão TCP).
+- **MariaDB recusou a conexão**: o banco não aceita TCP. Use no `.env`
+  `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` e crie o usuário como `'switchboard'@'localhost'`.
+- **sem permissão de leitura**: faltou o `GRANT SELECT ON asteriskcdrdb.cdr ...`.
+
+Depois de corrigir o `.env`, reinicie: `systemctl restart switchboard`.
 
 ### Variáveis de ambiente
 
