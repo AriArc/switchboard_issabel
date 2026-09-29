@@ -180,8 +180,6 @@ button, input, select { font: inherit; color: inherit; }
 .kpi.k3 .ic { background: color-mix(in srgb, var(--ring) 16%, transparent); color: var(--ring); }
 .kpi.k4 .ic { background: var(--teal-soft); color: var(--teal); }
 
-.dash { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
-.side-col { display: grid; gap: 20px; position: sticky; top: 88px; }
 
 /* ---------- Filtros ---------- */
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -246,22 +244,36 @@ button, input, select { font: inherit; color: inherit; }
 .st-ringing .avatar { animation: ring 1s ease-in-out infinite; }
 @keyframes ring { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
 
-/* ---------- Chamadas ativas ---------- */
-.calls { display: grid; gap: 10px; }
-.call {
-  border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 8px;
-  background: var(--surface-2);
+/* ---------- Chamadas do próprio ramal (topo) ---------- */
+.my-calls { display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: 8px; }
+.mc-idle {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted);
+  padding: 6px 12px; border-radius: 999px; border: 1px dashed var(--border); white-space: nowrap;
 }
-.call-parties { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
-.party { min-width: 0; }
-.party b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
-.party span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.party.right { text-align: right; }
-.call-arrow { color: var(--teal); }
-.call-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.timer { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; }
-.call-actions { display: flex; gap: 6px; }
-.call-actions .btn { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+.mc-idle .icon { width: 14px; height: 14px; color: var(--olive); }
+.mc {
+  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 4px 0 12px; min-width: 0;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.mc.up { border-color: color-mix(in srgb, var(--busy) 35%, var(--border)); }
+.mc.ringing { border-color: color-mix(in srgb, var(--ring) 55%, var(--border)); }
+.mc-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--busy); }
+.mc.ringing .mc-dot { background: var(--ring); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--ring) 30%, transparent); } }
+.mc-peer { display: flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 220px; }
+.mc-peer b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-peer small { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mc-timer { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.mc-btn {
+  width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer; flex: none;
+  display: grid; place-items: center;
+}
+.mc-btn .icon { width: 14px; height: 14px; }
+.mc-btn.transfer { background: var(--teal-soft); color: var(--teal); }
+.mc-btn.transfer:hover { background: var(--teal); color: #fff; }
+.mc-btn.hangup { background: var(--busy); color: #fff; }
+.mc-btn.hangup:hover { filter: brightness(.9); }
+.mc-more { font-size: 12px; font-weight: 700; color: var(--muted); }
 .empty { text-align: center; color: var(--muted); padding: 24px 8px; font-size: 13px; }
 .empty .icon { width: 28px; height: 28px; color: var(--olive); margin-bottom: 6px; }
 
@@ -335,10 +347,6 @@ tr:last-child td { border-bottom: none; }
 @keyframes slide { from { transform: translateY(10px); opacity: 0; } }
 
 /* ---------- Responsivo ---------- */
-@media (max-width: 1200px) {
-  .dash { grid-template-columns: 1fr; }
-  .side-col { position: static; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-}
 @media (max-width: 900px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shell { grid-template-columns: 1fr; }
@@ -355,4 +363,10 @@ tr:last-child td { border-bottom: none; }
   .search .input { width: 100%; }
   .card-head .search { width: 100%; }
   .conn .txt { display: none; }
+}
+@media (max-width: 700px) {
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .my-calls { order: 10; width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .mc { flex: 1 1 100%; }
+  .mc-peer { max-width: none; flex: 1; }
 }

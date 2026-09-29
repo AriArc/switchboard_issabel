@@ -197,34 +197,40 @@
     }).join('');
   }
 
+  // Chamadas do próprio ramal, em formato compacto no topo da tela
+  const MAX_TOP_CALLS = 2;
+
   function renderCalls() {
-    const calls = state.pbx.calls;
-    $('#calls-count').textContent = calls.length;
-    const el = $('#calls');
-    if (!calls.length) {
-      el.innerHTML = `<div class="empty">${icon('phone')}<div>Nenhuma chamada em andamento</div></div>`;
+    const el = $('#my-calls');
+    const myExt = state.me && state.me.extension;
+    if (!myExt) { el.hidden = true; return; }
+    el.hidden = false;
+
+    const extName = (x) => {
+      const e = state.pbx.extensions.find((i) => i.exten === x);
+      return e && e.name && e.name !== e.exten ? e.name : '';
+    };
+    const mine = state.pbx.calls.filter((c) => c.extensions.includes(myExt));
+    if (!mine.length) {
+      el.innerHTML = `<span class="mc-idle">${icon('phone')}Ramal ${esc(myExt)} · sem chamadas</span>`;
       return;
     }
-    const me = state.me;
-    const canManage = (c) => me.role !== 'user' || (me.extension && c.extensions.includes(me.extension));
-    el.innerHTML = calls.map((c) => {
+
+    el.innerHTML = mine.slice(0, MAX_TOP_CALLS).map((c) => {
+      const outgoing = c.from === myExt;
+      const peer = c.extensions.find((x) => x !== myExt) || (outgoing ? c.to : c.from) || '';
+      const peerName = extName(peer) || (outgoing ? c.toName : c.fromName) || '';
       const since = c.answeredAt || c.startedAt;
       const up = c.state === 'up';
-      return `<div class="call">
-        <div class="call-parties">
-          <div class="party"><b>${esc(c.fromName || c.from || 'Desconhecido')}</b><span>${esc(c.from)}</span></div>
-          <svg class="icon call-arrow"><use href="#i-arrow"/></svg>
-          <div class="party right"><b>${esc(c.toName || c.to || '—')}</b><span>${esc(c.to)}</span></div>
-        </div>
-        <div class="call-meta">
-          <span class="pill ${up ? 'st-inuse' : 'st-ringing'}">${up ? 'Em ligação' : 'Chamando'} · <span class="timer" data-since="${since}">${fmtDuration(now() - since)}</span></span>
-          ${canManage(c) ? `<div class="call-actions">
-            <button class="btn btn-teal" type="button" data-transfer="${esc(c.id)}" title="Transferir">${icon('transfer')}</button>
-            <button class="btn btn-danger" type="button" data-hangup="${esc(c.id)}" title="Desligar">${icon('phone-off')}</button>
-          </div>` : ''}
-        </div>
+      const label = up ? 'Em ligação' : outgoing ? 'Chamando' : 'Recebendo';
+      return `<div class="mc ${up ? 'up' : 'ringing'}" title="${esc(`${label}: ${peerName ? `${peerName} (${peer})` : peer}`)}">
+        <span class="mc-dot"></span>
+        <span class="mc-peer"><b>${esc(peerName || peer || 'Desconhecido')}</b>${peerName ? `<small>${esc(peer)}</small>` : ''}</span>
+        <span class="mc-timer" data-since="${since}">${fmtDuration(now() - since)}</span>
+        <button class="mc-btn transfer" type="button" data-transfer="${esc(c.id)}" title="Transferir" aria-label="Transferir">${icon('transfer')}</button>
+        <button class="mc-btn hangup" type="button" data-hangup="${esc(c.id)}" title="Desligar" aria-label="Desligar">${icon('phone-off')}</button>
       </div>`;
-    }).join('');
+    }).join('') + (mine.length > MAX_TOP_CALLS ? `<span class="mc-more">+${mine.length - MAX_TOP_CALLS}</span>` : '');
   }
 
   // Atualiza cronômetros sem re-renderizar tudo

@@ -83,6 +83,7 @@
       <header class="topbar">
         <button class="btn btn-icon btn-ghost menu-btn" id="menu-btn" type="button" aria-label="Menu"><svg class="icon"><use href="#i-menu"/></svg></button>
         <h2 id="view-title">Painel</h2>
+        <div class="my-calls" id="my-calls" aria-live="polite" hidden></div>
         <div class="grow"></div>
         <span class="conn" id="conn"><span class="dot"></span><span class="txt">Conectando…</span></span>
         <button class="btn btn-icon btn-ghost" id="theme-btn" type="button" aria-label="Alternar tema"><svg class="icon"><use href="#i-moon"/></svg></button>
@@ -97,8 +98,7 @@
           <div class="card kpi k4"><div class="ic"><svg class="icon"><use href="#i-activity"/></svg></div><div><div class="val" id="k-calls">0</div><div class="lbl">Chamadas ativas</div></div></div>
         </div>
 
-        <div class="dash">
-          <section class="card">
+        <section class="card">
             <div class="card-head">
               <div class="ramais-title">
                 <h3>Ramais</h3>
@@ -116,14 +116,6 @@
             </div>
             <div class="card-body"><div class="ext-grid" id="ext-grid"></div></div>
           </section>
-
-          <div class="side-col">
-            <section class="card">
-              <div class="card-head"><h3>Chamadas ativas</h3><div class="grow"></div><span class="badge" id="calls-count">0</span></div>
-              <div class="card-body"><div class="calls" id="calls"></div></div>
-            </section>
-          </div>
-        </div>
       </div>
 
       <!-- Histórico do ramal do usuário -->
