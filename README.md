@@ -189,7 +189,25 @@ navegador mostra um aviso. Há duas opções:
 
 Libere **apenas a porta 8443/TCP**. As portas 5038, 3306 e 8080 continuam fechadas para a internet.
 
-- **Firewall do Issabel** (*Segurança → Firewall*): crie uma regra de entrada permitindo TCP na porta 8443.
+- **Firewall do Issabel** (pela interface web):
+  1. *Segurança → Firewall → Definir Portas*: crie a porta **Switchboard**, protocolo **TCP**, porta **8443**.
+  2. *Segurança → Firewall → Regras do Firewall → Nova regra*:
+
+     | Campo | Valor |
+     |---|---|
+     | Tráfego | ENTRADA |
+     | Entrada | QUALQUER |
+     | Endereço de Origem | `0.0.0.0` / **`0`** (qualquer IP) |
+     | Endereço de Destino | `0.0.0.0` / **`0`** |
+     | Protocolo | TCP |
+     | Porta de Origem | **QUALQUER** |
+     | Porta de Destino | Switchboard |
+     | Target | ACEITO |
+
+     Atenção: máscara `/24` em `0.0.0.0` **não** significa "qualquer IP", e a porta de origem deve ser
+     QUALQUER (o navegador usa uma porta aleatória); com outros valores a regra nunca é aplicada.
+  3. Confirme que a regra está **acima** de qualquer regra de bloqueio geral (use as setas para reordenar)
+     e que o firewall está ativo.
 - Se o `firewalld` estiver ativo (`systemctl is-active firewalld`):
   ```bash
   firewall-cmd --permanent --add-port=8443/tcp && firewall-cmd --reload
