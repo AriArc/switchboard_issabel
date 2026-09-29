@@ -160,6 +160,7 @@ button, input, select { font: inherit; color: inherit; }
 .conn.on .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
 .conn.off .dot { background: var(--busy); }
 .content { padding: 24px 28px 40px; display: grid; gap: 20px; }
+.content > * { min-width: 0; }
 
 /* ---------- Cards ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -294,6 +295,43 @@ tr:last-child td { border-bottom: none; }
 .badge.operator { background: var(--lime-soft); color: var(--teal-strong); border-color: var(--lime); }
 .badge.ramal { background: var(--olive-soft); border-color: var(--olive); font-variant-numeric: tabular-nums; }
 .badge.inactive { color: var(--busy); }
+
+/* ---------- Histórico ---------- */
+.h-period { width: auto; height: 38px; }
+.history td { vertical-align: middle; }
+.dir { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; }
+.dir .icon { width: 16px; height: 16px; }
+.dir.in { background: var(--lime-soft); color: var(--teal); }
+.dir.out { background: var(--teal-soft); color: var(--teal); }
+.dir.missed { background: color-mix(in srgb, var(--busy) 14%, transparent); color: var(--busy); }
+.contact b { display: block; }
+.contact span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.num { font-variant-numeric: tabular-nums; }
+.badge.st-answered { color: var(--ok); }
+.badge.st-missed, .badge.st-busy, .badge.st-failed { color: var(--busy); }
+.badge.st-noanswer { color: var(--muted); }
+.h-more { display: flex; justify-content: center; padding-top: 12px; }
+.h-more .btn[hidden] { display: none; }
+@media (max-width: 640px) {
+  .history, .history tbody { display: block; width: 100%; }
+  .history thead { display: none; }
+  .history tr {
+    display: grid; grid-template-columns: 32px auto auto 1fr auto; align-items: center;
+    grid-template-areas: "dir contact contact contact call" "dir date dur status call";
+    column-gap: 10px; row-gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .history tr:last-child { border-bottom: none; }
+  .history td { padding: 0; border: none; font-size: 12px; }
+  .history td:nth-child(1) { grid-area: dir; }
+  .history td:nth-child(2) { grid-area: contact; font-size: 14px; min-width: 0; }
+  .history td:nth-child(3) { grid-area: date; color: var(--muted); }
+  .history td:nth-child(4) { grid-area: dur; color: var(--muted); }
+  .history td:nth-child(5) { grid-area: status; }
+  .history td:nth-child(6) { grid-area: call; }
+  .history .contact span { display: inline; margin-left: 6px; }
+  .history .contact b { display: inline; }
+  .h-period { flex: 1; }
+}
 
 /* ---------- Modal ---------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 26, 24, .55); display: grid; place-items: center; padding: 16px; z-index: 50; }

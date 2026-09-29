@@ -16,7 +16,7 @@ function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
 
-function createApp({ config, users, pbx }) {
+function createApp({ config, users, pbx, cdr = null }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
@@ -82,6 +82,23 @@ function createApp({ config, users, pbx }) {
       console.log(`[click2call] ${req.user.username} (${extension}) -> ${number}`);
       res.json({ ok: true, extension, number });
     } catch (err) {
+      next(err);
+    }
+  });
+
+  // Histórico de ligações: sempre do ramal cadastrado do usuário logado
+  app.get('/api/history', auth, async (req, res, next) => {
+    try {
+      const extension = req.user.extension;
+      if (!extension) throw httpError(400, 'Seu usuário não possui ramal cadastrado.');
+      if (!cdr) throw httpError(503, 'Histórico indisponível: banco de CDR não configurado (CDR_DB_HOST).');
+      const result = await cdr.history(extension, req.query);
+      res.json({ extension, ...result });
+    } catch (err) {
+      if (!err.status) {
+        console.error('[cdr]', err.message);
+        return next(httpError(502, 'Não foi possível consultar o histórico no banco de CDR.'));
+      }
       next(err);
     }
   });

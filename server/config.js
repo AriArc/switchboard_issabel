@@ -34,6 +34,18 @@ module.exports = {
     secret: env.AMI_SECRET || '',
   },
 
+  // Banco de CDR do Issabel (histórico de ligações). Desativado se CDR_DB_HOST não for definido.
+  cdrDb: env.CDR_DB_HOST
+    ? {
+        host: env.CDR_DB_HOST,
+        port: Number(env.CDR_DB_PORT || 3306),
+        user: env.CDR_DB_USER || 'switchboard',
+        password: env.CDR_DB_PASSWORD || '',
+        database: env.CDR_DB_NAME || 'asteriskcdrdb',
+        table: env.CDR_DB_TABLE || 'cdr',
+      }
+    : null,
+
   channelTech: (env.CHANNEL_TECH || 'SIP').toUpperCase(),
   dialContext: env.DIAL_CONTEXT || 'from-internal',
   hintContext: env.HINT_CONTEXT || 'ext-local',

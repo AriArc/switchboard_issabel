@@ -7,6 +7,9 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 - **Click-to-call**: pelo discador, pelo botão de cada ramal ou por link (`/?call=11999990000`)
 - **Ramal discador fixo por usuário**: o click-to-call sempre usa o ramal associado ao usuário no cadastro;
   o navegador não consegue escolher outro ramal de origem
+- **Histórico de ligações** do próprio ramal (aba *Histórico*): recebidas, realizadas e perdidas, com período,
+  busca, totais e botão para ligar de volta. Cada usuário só vê as ligações do ramal cadastrado para ele
+- Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
 - Transferência e desligamento de chamadas (operadores/administradores em qualquer chamada, usuários só nas próprias)
 - Cadastro de usuários com perfis: **Administrador**, **Operador (mesa)** e **Usuário**
 - Tema claro/escuro e layout responsivo
@@ -41,6 +44,21 @@ writetimeout = 5000
 
 Depois recarregue: `asterisk -rx "manager reload"`.
 
+## Acesso ao CDR (aba Histórico)
+
+O histórico é lido da tabela `cdr` do banco `asteriskcdrdb` do Issabel. Crie um usuário
+**somente leitura** no MySQL/MariaDB do Issabel:
+
+```sql
+CREATE USER 'switchboard'@'192.168.0.50' IDENTIFIED BY 'uma-senha-forte';
+GRANT SELECT ON asteriskcdrdb.cdr TO 'switchboard'@'192.168.0.50';
+FLUSH PRIVILEGES;
+```
+
+Se o switchboard rodar em outra máquina, o MySQL do Issabel precisa aceitar conexões de rede
+(`bind-address` em `/etc/my.cnf`) e a porta 3306 precisa estar liberada no firewall apenas para o IP do switchboard.
+Sem `CDR_DB_HOST` configurado, o restante do sistema funciona normalmente e a aba Histórico mostra um aviso.
+
 ## Instalação
 
 ```bash
@@ -67,6 +85,9 @@ O campo sugere os ramais lidos do Issabel. Cada ramal só pode ser associado a u
 | `DIAL_CONTEXT` | `from-internal` | Contexto usado para discar o destino |
 | `HINT_CONTEXT` | `ext-local` | Contexto dos hints dos ramais |
 | `ORIGINATE_TIMEOUT_MS` | `30000` | Tempo que o ramal do usuário fica tocando |
+| `CDR_DB_HOST` / `CDR_DB_PORT` | — / `3306` | MySQL do Issabel com o CDR (aba Histórico) |
+| `CDR_DB_USER` / `CDR_DB_PASSWORD` | — | Usuário somente leitura do CDR |
+| `CDR_DB_NAME` / `CDR_DB_TABLE` | `asteriskcdrdb` / `cdr` | Banco e tabela do CDR |
 | `SESSION_TTL_HOURS` | `12` | Duração da sessão |
 | `DATA_FILE` | `data/users.json` | Arquivo do cadastro de usuários |
 | `MOCK_PBX` | `0` | `1` simula um PABX (demonstração sem Issabel) |
@@ -96,7 +117,8 @@ sempre do ramal cadastrado do usuário, mesmo que a requisição tente informar 
 ```
 server/
   index.js      servidor HTTP + WebSocket
-  app.js        rotas da API (login, click-to-call, chamadas, usuários)
+  app.js        rotas da API (login, click-to-call, chamadas, histórico, usuários)
+  cdr.js        histórico de ligações (MySQL do Issabel ou simulado)
   ami.js        cliente AMI (Asterisk Manager Interface)
   pbx.js        estado de ramais/chamadas a partir dos eventos do AMI
   mock-pbx.js   PABX simulado

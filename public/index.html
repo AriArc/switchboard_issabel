@@ -29,6 +29,10 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
     <symbol id="i-ring" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
     <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-in" viewBox="0 0 24 24"><path d="M17 7 7 17M16 17H7V8"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+    <symbol id="i-missed" viewBox="0 0 24 24"><path d="M17 7 7 17M16 17H7V8"/><path d="M14 4l6 6M20 4l-6 6"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   </svg>
 
@@ -58,6 +62,7 @@
       <div class="brand-stripe"></div>
       <nav class="nav">
         <a href="#painel" data-view="painel"><svg class="icon"><use href="#i-grid"/></svg>Painel</a>
+        <a href="#historico" data-view="historico" data-has-ext><svg class="icon"><use href="#i-history"/></svg>Histórico</a>
         <a href="#usuarios" data-view="usuarios" data-admin><svg class="icon"><use href="#i-users"/></svg>Usuários</a>
       </nav>
       <div class="spacer"></div>
@@ -136,6 +141,45 @@
             </section>
           </div>
         </div>
+      </div>
+
+      <!-- Histórico do ramal do usuário -->
+      <div class="content" id="view-historico" hidden>
+        <div class="kpis">
+          <div class="card kpi k4"><div class="ic"><svg class="icon"><use href="#i-history"/></svg></div><div><div class="val" id="h-total">0</div><div class="lbl">Ligações no período</div></div></div>
+          <div class="card kpi k1"><div class="ic"><svg class="icon"><use href="#i-in"/></svg></div><div><div class="val" id="h-in">0</div><div class="lbl">Recebidas</div></div></div>
+          <div class="card kpi k4"><div class="ic"><svg class="icon"><use href="#i-out"/></svg></div><div><div class="val" id="h-out">0</div><div class="lbl">Realizadas</div></div></div>
+          <div class="card kpi k2"><div class="ic"><svg class="icon"><use href="#i-missed"/></svg></div><div><div class="val" id="h-missed">0</div><div class="lbl">Perdidas</div></div></div>
+        </div>
+        <section class="card">
+          <div class="card-head">
+            <h3>Ligações do ramal <span id="h-ext">—</span></h3>
+            <div class="chips" id="h-direction">
+              <button class="chip active" data-direction="all" type="button">Todas</button>
+              <button class="chip" data-direction="in" type="button">Recebidas</button>
+              <button class="chip" data-direction="out" type="button">Realizadas</button>
+              <button class="chip" data-direction="missed" type="button">Perdidas</button>
+            </div>
+            <div class="grow"></div>
+            <select class="input h-period" id="h-days" aria-label="Período">
+              <option value="0">Hoje</option>
+              <option value="7" selected>Últimos 7 dias</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+            </select>
+            <label class="search"><svg class="icon"><use href="#i-search"/></svg><input class="input" id="h-search" placeholder="Buscar número ou nome" type="search"></label>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="history">
+                <thead><tr><th>Tipo</th><th>Contato</th><th>Data e hora</th><th>Duração</th><th>Status</th><th></th></tr></thead>
+                <tbody id="h-body"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="h-empty" hidden></div>
+            <div class="h-more"><button class="btn" type="button" id="h-more" hidden>Carregar mais</button></div>
+          </div>
+        </section>
       </div>
 
       <!-- Usuários -->

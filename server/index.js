@@ -7,6 +7,7 @@ const { UserStore } = require('./users');
 const { AmiPbx } = require('./pbx');
 const { MockPbx } = require('./mock-pbx');
 const { createApp } = require('./app');
+const { MysqlCdr, MockCdr } = require('./cdr');
 const { userFromRequest } = require('./auth');
 
 const users = new UserStore(config.dataFile);
@@ -17,7 +18,11 @@ if (config.sessionSecret === 'dev-secret-change-me') {
 }
 
 const pbx = config.mock ? new MockPbx(config) : new AmiPbx(config);
-const app = createApp({ config, users, pbx });
+let cdr = null;
+if (config.mock) cdr = new MockCdr(pbx);
+else if (config.cdrDb) cdr = new MysqlCdr(config.cdrDb);
+else console.warn('[cdr] CDR_DB_HOST não definido — aba Histórico ficará indisponível');
+const app = createApp({ config, users, pbx, cdr });
 const server = http.createServer(app);
 
 // Atualizações em tempo real do painel

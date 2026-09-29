@@ -84,6 +84,8 @@
     hint.hidden = Boolean(me.extension);
     hint.textContent = 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
     $$('[data-admin]').forEach((el) => { el.hidden = me.role !== 'admin'; });
+    $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension; });
+    $('#h-ext').textContent = me.extension || '—';
     connectWs();
     route();
     handleCallParam();
@@ -99,6 +101,8 @@
       });
       $('#login-pass').value = '';
       state.me = user;
+      // Perfil "Usuário" sempre entra direto no painel do switchboard
+      if (user.role === 'user') history.replaceState(null, '', `${location.pathname}${location.search}#painel`);
       showApp();
     } catch (err) {
       $('#login-error').textContent = err.message;
@@ -418,18 +422,106 @@
     if (e.key === 'Escape') $$('.modal-backdrop').forEach((m) => { m.hidden = true; });
   });
 
+  // ---------- Histórico do ramal ----------
+  const HIST_PAGE = 50;
+  const DIR_LABEL = { in: 'Recebida', out: 'Realizada' };
+  const HIST_STATUS = { answered: 'Atendida', missed: 'Perdida', noanswer: 'Não atendida', busy: 'Ocupado', failed: 'Falhou' };
+  const hist = { direction: 'all', days: '7', search: '', records: [], offset: 0, loading: false, seq: 0 };
+
+  const fmtDate = (s) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
+    if (!m) return esc(s);
+    const today = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const isToday = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}` === `${m[1]}-${m[2]}-${m[3]}`;
+    return `${isToday ? 'Hoje' : `${m[3]}/${m[2]}/${m[1]}`} ${m[4]}:${m[5]}`;
+  };
+
+  async function loadHistory(append = false) {
+    const seq = ++hist.seq;
+    if (!append) { hist.offset = 0; hist.records = []; }
+    hist.loading = true;
+    $('#h-more').disabled = true;
+    if (!append) renderHistory('Carregando…');
+    const qs = new URLSearchParams({
+      days: hist.days, direction: hist.direction, search: hist.search, limit: HIST_PAGE, offset: hist.offset,
+    });
+    try {
+      const res = await api('GET', `/api/history?${qs}`);
+      if (seq !== hist.seq) return; // resposta de uma consulta antiga
+      hist.records = hist.records.concat(res.records);
+      hist.offset += HIST_PAGE;
+      $('#h-more').hidden = !res.hasMore;
+      if (res.summary) {
+        $('#h-total').textContent = res.summary.total;
+        $('#h-in').textContent = res.summary.in;
+        $('#h-out').textContent = res.summary.out;
+        $('#h-missed').textContent = res.summary.missed;
+      }
+      renderHistory();
+    } catch (err) {
+      if (seq !== hist.seq) return;
+      $('#h-more').hidden = true;
+      renderHistory(err.message);
+    } finally {
+      if (seq === hist.seq) { hist.loading = false; $('#h-more').disabled = false; }
+    }
+  }
+
+  function renderHistory(message) {
+    const extName = (x) => (state.pbx.extensions.find((e) => e.exten === x) || {}).name;
+    const empty = $('#h-empty');
+    if (message || !hist.records.length) {
+      $('#h-body').innerHTML = '';
+      empty.hidden = false;
+      empty.innerHTML = `${icon('history')}<div>${esc(message || 'Nenhuma ligação encontrada no período')}</div>`;
+      return;
+    }
+    empty.hidden = true;
+    $('#h-body').innerHTML = hist.records.map((r) => {
+      const kind = r.status === 'missed' ? 'missed' : r.direction;
+      const name = r.peerName || extName(r.peer) || '';
+      const canCall = r.peer && /^\+?[0-9*#]{2,32}$/.test(r.peer) && r.peer !== state.me.extension;
+      return `<tr>
+        <td><div class="dir ${kind}" title="${esc(DIR_LABEL[r.direction])}">${icon(kind)}</div></td>
+        <td><div class="contact"><b class="num">${esc(name || r.peer || 'Desconhecido')}</b>${name ? `<span>${esc(r.peer)}</span>` : `<span>${esc(DIR_LABEL[r.direction])}</span>`}</div></td>
+        <td class="num">${fmtDate(r.calldate)}</td>
+        <td class="num">${r.status === 'answered' ? fmtDuration(r.billsec * 1000) : '—'}</td>
+        <td><span class="badge st-${esc(r.status)}">${esc(HIST_STATUS[r.status] || r.status)}</span></td>
+        <td style="text-align:right">${canCall ? `<button class="call-btn" type="button" data-call="${esc(r.peer)}" title="Ligar para ${esc(r.peer)}" aria-label="Ligar para ${esc(r.peer)}">${icon('phone')}</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  $('#h-direction').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-direction]');
+    if (!chip) return;
+    hist.direction = chip.dataset.direction;
+    $$('#h-direction .chip').forEach((c) => c.classList.toggle('active', c === chip));
+    loadHistory();
+  });
+  $('#h-days').addEventListener('change', (e) => { hist.days = e.target.value; loadHistory(); });
+  let histSearchTimer;
+  $('#h-search').addEventListener('input', (e) => {
+    clearTimeout(histSearchTimer);
+    histSearchTimer = setTimeout(() => { hist.search = e.target.value.trim(); loadHistory(); }, 350);
+  });
+  $('#h-more').addEventListener('click', () => !hist.loading && loadHistory(true));
+
   // ---------- Navegação ----------
+  const VIEWS = { painel: 'Painel', historico: 'Histórico de ligações', usuarios: 'Usuários' };
   function route() {
     let view = (location.hash || '#painel').slice(1);
     if (view === 'usuarios' && state.me.role !== 'admin') view = 'painel';
-    if (!['painel', 'usuarios'].includes(view)) view = 'painel';
+    if (view === 'historico' && !state.me.extension) view = 'painel';
+    if (!VIEWS[view]) view = 'painel';
     state.view = view;
-    $('#view-painel').hidden = view !== 'painel';
-    $('#view-usuarios').hidden = view !== 'usuarios';
-    $('#view-title').textContent = view === 'painel' ? 'Painel' : 'Usuários';
+    for (const v of Object.keys(VIEWS)) $(`#view-${v}`).hidden = v !== view;
+    $('#view-title').textContent = VIEWS[view];
     $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === view));
     $('.shell').classList.remove('nav-open');
     if (view === 'usuarios') loadUsers();
+    if (view === 'historico') loadHistory();
   }
   window.addEventListener('hashchange', () => state.me && route());
   $('#menu-btn').addEventListener('click', () => $('.shell').classList.toggle('nav-open'));
