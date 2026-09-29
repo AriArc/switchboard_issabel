@@ -4,7 +4,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 **Intek Telecomunicações** e **click-to-call**.
 
 - Painel em tempo real dos ramais (livre, em ligação, tocando, em espera, indisponível) e das chamadas ativas
-- **Click-to-call**: pelo discador, pelo botão de cada ramal ou por link (`/?call=11999990000`)
+- **Click-to-call**: clique em qualquer ramal do painel, no botão de ligar de volta do Histórico ou use um link (`/?call=11999990000`)
 - **Ramal discador fixo por usuário**: o click-to-call sempre usa o ramal associado ao usuário no cadastro;
   o navegador não consegue escolher outro ramal de origem
 - **Histórico de ligações** do próprio ramal (aba *Histórico*): recebidas, realizadas e perdidas, com período,
@@ -16,7 +16,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 
 ## Como o click-to-call funciona
 
-1. O usuário informa o destino e clica em **Ligar**.
+1. O usuário clica no card de um ramal (ou em "ligar de volta" no Histórico).
 2. O servidor busca o ramal discador do usuário no cadastro e envia um `Originate` ao AMI:
    `Channel: PJSIP/<ramal>`, `Context: from-internal`, `Exten: <destino>`.
 3. O telefone do usuário toca exibindo "Chamando &lt;destino&gt;". Ao atender, o Issabel disca o destino

@@ -180,7 +180,7 @@ button, input, select { font: inherit; color: inherit; }
 .kpi.k3 .ic { background: color-mix(in srgb, var(--ring) 16%, transparent); color: var(--ring); }
 .kpi.k4 .ic { background: var(--teal-soft); color: var(--teal); }
 
-.dash { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.dash { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
 .side-col { display: grid; gap: 20px; position: sticky; top: 88px; }
 
 /* ---------- Filtros ---------- */
@@ -216,6 +216,20 @@ button, input, select { font: inherit; color: inherit; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: color-mix(in srgb, var(--st) 14%, transparent); color: color-mix(in srgb, var(--st) 80%, var(--text)); }
 .peer { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .peer .icon { width: 12px; height: 12px; vertical-align: -1px; }
+.ramais-title { display: grid; gap: 2px; }
+.ext.callable { cursor: pointer; }
+.ext.callable:hover, .ext.callable:focus-visible {
+  border-color: var(--lime-strong); outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 45%, transparent);
+}
+.ext.callable:active { transform: translateY(0); }
+.call-ic {
+  width: 32px; height: 32px; border-radius: 10px; flex: none; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--off); transition: background .15s, color .15s;
+}
+.call-ic .icon { width: 16px; height: 16px; }
+.ext.callable .call-ic { background: var(--lime-soft); color: var(--teal); }
+.ext.callable:hover .call-ic, .ext.callable:focus-visible .call-ic { background: var(--lime); color: var(--teal-deep); }
 .call-btn {
   width: 32px; height: 32px; border-radius: 10px; border: none; cursor: pointer; flex: none;
   background: var(--lime); color: var(--teal-deep); display: grid; place-items: center;
@@ -231,39 +245,6 @@ button, input, select { font: inherit; color: inherit; }
 .st-unavailable { --st: var(--off); }
 .st-ringing .avatar { animation: ring 1s ease-in-out infinite; }
 @keyframes ring { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
-
-/* ---------- Discador (click-to-call) ---------- */
-.dialer { overflow: hidden; }
-.dialer-head {
-  background: linear-gradient(135deg, var(--teal), var(--teal-deep)); color: #fff; padding: 16px 18px;
-  display: flex; align-items: center; gap: 12px; position: relative; overflow: hidden;
-}
-.dialer-head::after {
-  content: ""; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%;
-  border: 14px solid rgba(185, 218, 127, .25);
-}
-.dialer-head .icon { width: 22px; height: 22px; color: var(--lime); }
-.dialer-head h3 { margin: 0; font-size: 15px; }
-.dialer-head small { opacity: .8; }
-.origin {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  background: var(--lime-soft); border: 1px dashed color-mix(in srgb, var(--teal) 40%, transparent);
-  border-radius: 12px; padding: 10px 12px; margin-bottom: 14px;
-}
-.origin .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
-.origin .val { font-weight: 800; color: var(--teal); font-size: 16px; }
-.origin .lock { color: var(--teal); opacity: .7; }
-.number-input { font-size: 22px; height: 52px; text-align: center; letter-spacing: .06em; font-weight: 700; font-variant-numeric: tabular-nums; }
-.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
-.key {
-  height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
-  font-size: 18px; font-weight: 700; cursor: pointer; display: grid; place-items: center; line-height: 1;
-}
-.key small { display: block; font-size: 9px; color: var(--muted); font-weight: 600; letter-spacing: .12em; margin-top: 2px; }
-.key:hover { background: var(--lime-soft); border-color: var(--lime); }
-.dial-actions { display: grid; grid-template-columns: 1fr 48px; gap: 8px; }
-.dial-actions .btn-primary { height: 48px; font-size: 15px; }
-.dial-actions .btn { height: 48px; }
 
 /* ---------- Chamadas ativas ---------- */
 .calls { display: grid; gap: 10px; }
@@ -356,7 +337,7 @@ tr:last-child td { border-bottom: none; }
 /* ---------- Responsivo ---------- */
 @media (max-width: 1200px) {
   .dash { grid-template-columns: 1fr; }
-  .side-col { order: -1; position: static; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .side-col { position: static; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 }
 @media (max-width: 900px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

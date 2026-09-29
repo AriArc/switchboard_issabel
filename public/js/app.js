@@ -78,11 +78,9 @@
     $('#me-role').textContent = ROLE_LABEL[me.role] || me.role;
     $('#me-avatar').innerHTML = initials(me.name);
     $('#me-ext').textContent = me.extension || '—';
-    $('#origin-ext').textContent = me.extension ? `Ramal ${me.extension}` : 'Não definido';
-    $('#dial-btn').disabled = !me.extension;
-    const hint = $('#dial-hint');
-    hint.hidden = Boolean(me.extension);
-    hint.textContent = 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
+    $('#call-hint').textContent = me.extension
+      ? `Clique em um ramal para ligar a partir do seu ramal ${me.extension}`
+      : 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
     $$('[data-admin]').forEach((el) => { el.hidden = me.role !== 'admin'; });
     $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension; });
     $('#h-ext').textContent = me.extension || '—';
@@ -181,19 +179,20 @@
     grid.innerHTML = list.map((e) => {
       const mine = e.exten === myExt;
       const canCall = !mine && myExt && e.status !== 'unavailable';
+      // Nome igual ao número do ramal (comum no Issabel) é tratado como "sem nome"
+      const name = e.name && e.name !== e.exten ? e.name : '';
       const peer = e.call
         ? `<span class="peer">${icon('phone')} ${esc(e.call.peer)} · <span data-since="${e.call.since}">${fmtDuration(now() - e.call.since)}</span></span>`
         : `<span class="pill">${esc(STATUS_LABEL[e.status] || e.status)}</span>`;
-      return `<div class="ext st-${esc(e.status)}${mine ? ' mine' : ''}">
+      const title = canCall ? `Clique para ligar para ${name || `o ramal ${e.exten}`}` : mine ? 'Seu ramal' : '';
+      return `<div class="ext st-${esc(e.status)}${mine ? ' mine' : ''}${canCall ? ' callable' : ''}"
+        data-ext="${esc(e.exten)}" ${canCall ? 'role="button" tabindex="0"' : ''} title="${esc(title)}"
+        aria-label="${esc(`${name || 'Ramal'} ${e.exten}, ${STATUS_LABEL[e.status] || e.status}`)}">
         <div class="ext-top">
-          <div class="avatar">${initials(e.name, e.exten)}<span class="st"></span></div>
-          <div class="ext-info"><div class="ext-name" title="${esc(e.name)}">${esc(e.name || `Ramal ${e.exten}`)}${mine ? ' <small class="ext-num">(você)</small>' : ''}</div><div class="ext-num">Ramal ${esc(e.exten)}</div></div>
+          <div class="avatar">${initials(name, e.exten)}<span class="st"></span></div>
+          <div class="ext-info"><div class="ext-name">${esc(name || `Ramal ${e.exten}`)}${mine ? ' <small class="ext-num">(você)</small>' : ''}</div><div class="ext-num">${name ? `Ramal ${esc(e.exten)}` : '&nbsp;'}</div></div>
         </div>
-        <div class="ext-bottom">${peer}
-          <button class="call-btn" type="button" data-call="${esc(e.exten)}" ${canCall ? '' : 'disabled'} title="${
-            canCall ? `Ligar para ${esc(e.name || e.exten)}` : mine ? 'Seu ramal' : 'Indisponível'
-          }" aria-label="Ligar para ramal ${esc(e.exten)}">${icon('phone')}</button>
-        </div>
+        <div class="ext-bottom">${peer}<span class="call-ic" aria-hidden="true">${icon('phone')}</span></div>
       </div>`;
     }).join('');
   }
@@ -243,44 +242,46 @@
   $('#search').addEventListener('input', (e) => { state.search = e.target.value.trim(); renderExtensions(); });
 
   // ---------- Click to call ----------
+  const dialing = new Set(); // evita disparar a mesma chamada várias vezes seguidas
+
   async function clickToCall(number) {
     number = String(number || '').trim();
-    if (!number) return toast('Informe o número de destino', 'err');
-    const btn = $('#dial-btn');
-    btn.disabled = true;
+    if (!number || dialing.has(number)) return;
+    dialing.add(number);
     try {
       const res = await api('POST', '/api/call', { number });
       toast(`Seu ramal ${res.extension} vai tocar. Atenda para ligar para ${res.number}.`);
     } catch (err) {
       toast(err.message, 'err');
     } finally {
-      btn.disabled = !state.me.extension;
+      setTimeout(() => dialing.delete(number), 4000);
     }
   }
 
-  const KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'], ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['*', ''], ['0', '+'], ['#', '']];
-  $('#keypad').innerHTML = KEYS.map(([k, sub]) => `<button class="key" type="button" data-key="${k}">${k}<small>${sub || '&nbsp;'}</small></button>`).join('');
-  $('#keypad').addEventListener('click', (e) => {
-    const key = e.target.closest('[data-key]');
-    if (!key) return;
-    const input = $('#dial-number');
-    input.value += key.dataset.key;
-    input.focus();
+  // Clique em um card de ramal: liga do ramal do usuário para aquele ramal
+  function callExtension(card) {
+    const ext = card.dataset.ext;
+    if (card.classList.contains('callable')) return clickToCall(ext);
+    if (!state.me.extension) return toast('Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.', 'err');
+    if (ext === state.me.extension) return;
+    toast(`Ramal ${ext} indisponível no momento`, 'err');
+  }
+
+  $('#ext-grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.ext[data-ext]');
+    if (card) callExtension(card);
   });
-  $('#dial-back').addEventListener('click', () => {
-    const input = $('#dial-number');
-    input.value = input.value.slice(0, -1);
-    input.focus();
-  });
-  $('#dial-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    clickToCall($('#dial-number').value);
+  $('#ext-grid').addEventListener('keydown', (e) => {
+    const card = e.target.closest('.ext.callable');
+    if (card && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      callExtension(card);
+    }
   });
 
   document.addEventListener('click', (e) => {
     const call = e.target.closest('[data-call]');
     if (call && !call.disabled) {
-      $('#dial-number').value = call.dataset.call;
       clickToCall(call.dataset.call);
       return;
     }
@@ -302,7 +303,6 @@
     if (!number) return;
     number = number.replace(/^tel:/i, '');
     history.replaceState(null, '', location.pathname + location.hash);
-    $('#dial-number').value = number;
     if (state.me.extension && confirm(`Ligar para ${number} pelo ramal ${state.me.extension}?`)) clickToCall(number);
   }
 

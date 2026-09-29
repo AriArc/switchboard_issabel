@@ -100,7 +100,10 @@
         <div class="dash">
           <section class="card">
             <div class="card-head">
-              <h3>Ramais</h3>
+              <div class="ramais-title">
+                <h3>Ramais</h3>
+                <span class="hint" id="call-hint"></span>
+              </div>
               <div class="chips" id="filters">
                 <button class="chip active" data-filter="all" type="button">Todos</button>
                 <button class="chip" data-filter="idle" type="button">Livres</button>
@@ -115,26 +118,6 @@
           </section>
 
           <div class="side-col">
-            <section class="card dialer">
-              <div class="dialer-head">
-                <svg class="icon"><use href="#i-phone"/></svg>
-                <div><h3>Click to call</h3><small>Seu ramal toca primeiro; ao atender, o destino é discado.</small></div>
-              </div>
-              <form class="card-body" id="dial-form">
-                <div class="origin">
-                  <div><div class="lbl">Discar pelo ramal</div><div class="val" id="origin-ext">—</div></div>
-                  <svg class="icon lock" aria-label="Definido no cadastro do usuário"><title>Definido no cadastro do usuário</title><use href="#i-lock"/></svg>
-                </div>
-                <input class="input number-input" id="dial-number" inputmode="tel" autocomplete="off" placeholder="Número ou ramal" aria-label="Número de destino">
-                <div class="keypad" id="keypad"></div>
-                <div class="dial-actions">
-                  <button class="btn btn-primary" type="submit" id="dial-btn"><svg class="icon"><use href="#i-phone"/></svg>Ligar</button>
-                  <button class="btn" type="button" id="dial-back" aria-label="Apagar"><svg class="icon"><use href="#i-back"/></svg></button>
-                </div>
-                <p class="hint" id="dial-hint" hidden></p>
-              </form>
-            </section>
-
             <section class="card">
               <div class="card-head"><h3>Chamadas ativas</h3><div class="grow"></div><span class="badge" id="calls-count">0</span></div>
               <div class="card-body"><div class="calls" id="calls"></div></div>
