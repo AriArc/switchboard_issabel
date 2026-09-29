@@ -86,19 +86,36 @@ asterisk -rx "manager show user switchboard"
 ## 3. Usuário do banco de CDR (aba Histórico)
 
 O histórico é lido da tabela `cdr` do banco `asteriskcdrdb`. Crie um usuário **somente leitura**,
-que só conecta a partir da própria VPS:
+que só conecta a partir da própria VPS.
+
+A senha de `root` do MariaDB do Issabel fica em `/etc/issabel.conf` (linha `mysqlrootpwd`):
 
 ```bash
+grep mysqlrootpwd /etc/issabel.conf
 mysql -u root -p
 ```
 
+Crie o usuário **para os dois endereços locais** (`127.0.0.1` e `localhost`), com a mesma senha.
+Dependendo da configuração, o MariaDB identifica a conexão local por um ou pelo outro; criando os dois,
+o acesso funciona em qualquer caso. Anote a senha: ela vai no `CDR_DB_PASSWORD` do `.env` (passo 4).
+
 ```sql
+DROP USER IF EXISTS 'switchboard'@'127.0.0.1';
+DROP USER IF EXISTS 'switchboard'@'localhost';
 CREATE USER 'switchboard'@'127.0.0.1' IDENTIFIED BY 'uma-senha-forte-cdr';
+CREATE USER 'switchboard'@'localhost' IDENTIFIED BY 'uma-senha-forte-cdr';
 GRANT SELECT ON asteriskcdrdb.cdr TO 'switchboard'@'127.0.0.1';
+GRANT SELECT ON asteriskcdrdb.cdr TO 'switchboard'@'localhost';
 FLUSH PRIVILEGES;
+EXIT;
 ```
 
-A senha do `root` do MariaDB é a definida na instalação do Issabel.
+Teste o usuário direto no banco (deve mostrar um número):
+
+```bash
+mysql -h 127.0.0.1 -u switchboard -p asteriskcdrdb -e "SELECT COUNT(*) FROM cdr"
+```
+
 Sem `CDR_DB_HOST` configurado, o restante do sistema funciona normalmente e a aba Histórico mostra um aviso.
 
 ## 4. Configurar o `.env`
@@ -140,20 +157,14 @@ systemctl status switchboard          # deve mostrar "active (running)"
 journalctl -u switchboard -f          # logs; deve aparecer "[ami] conectado em 127.0.0.1:5038"
 ```
 
-## 6. Se você já configurou o Apache/HTTPS antes, desfaça
-
-Numa versão anterior deste guia o Apache publicava o switchboard na 8443. Agora o próprio switchboard usa
-essa porta, então o Apache precisa liberá-la (senão o serviço não sobe com erro `EADDRINUSE`):
+Confira o acesso ao histórico (troque `3601` por um ramal existente):
 
 ```bash
-rm -f /etc/httpd/conf.d/switchboard.conf
-systemctl reload httpd
-systemctl restart switchboard
+cd /opt/switchboard_issabel
+sudo -u switchboard npm run check-cdr -- 3601   # deve responder "✓ Conexão OK"
 ```
 
-Se nunca criou esse arquivo, pule este passo.
-
-## 7. Liberar a porta 8443 no firewall
+## 6. Liberar a porta 8443 no firewall
 
 Libere **apenas a porta 8443/TCP**. As portas 5038 e 3306 continuam fechadas para a internet.
 
@@ -182,13 +193,14 @@ Libere **apenas a porta 8443/TCP**. As portas 5038 e 3306 continuam fechadas par
   ```
 - Se o provedor da VPS tiver firewall no painel (security group), libere a 8443 lá também.
 
-## 8. Primeiro acesso
+## 7. Primeiro acesso
 
 Acesse `http://<IP-publico-da-VPS>:8443` (com **http**, não https) e entre com `ADMIN_USER` / `ADMIN_PASSWORD`.
 **Troque a senha do administrador logo após o primeiro acesso.**
 
 Em **Usuários → Novo usuário**, informe nome, login, senha, perfil e o **ramal discador**.
 O campo sugere os ramais lidos do Issabel. Cada ramal só pode ser associado a um usuário.
+Usuários do perfil **Usuário** entram direto no painel; clicando em um ramal, a ligação sai do ramal cadastrado deles.
 
 ## Segurança sem HTTPS
 
@@ -223,7 +235,7 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | Navegador mostra "Não seguro" | Esperado: o acesso é HTTP, sem certificado |
 | Erro "Sua conexão não é particular" | O endereço foi digitado com `https://`; use `http://IP:8443` |
 | `http://IP:8443` não abre | `systemctl status switchboard`; regra da 8443 no firewall do Issabel / firewalld / painel da VPS |
-| Serviço não sobe com `EADDRINUSE` | Outro programa usa a 8443 (ex.: o Apache do passo 6): `ss -ltnp \| grep 8443` |
+| Serviço não sobe com `EADDRINUSE` | Outro programa usa a 8443: `ss -ltnp \| grep 8443`. Se for o Apache (configuração HTTPS de uma versão antiga deste guia): `rm -f /etc/httpd/conf.d/switchboard.conf && systemctl reload httpd && systemctl restart switchboard` |
 
 ### Diagnóstico do Histórico (CDR)
 
@@ -235,10 +247,12 @@ sudo -u switchboard npm run check-cdr -- 3601     # troque 3601 por um ramal
 O comando usa as configurações do `.env`, testa a conexão com o MariaDB, mostra as permissões do usuário
 e as últimas ligações do ramal. Causas comuns:
 
-- **acesso negado**: senha diferente da usada no `CREATE USER`, ou usuário criado para outro host.
-  Recrie com `'switchboard'@'127.0.0.1'` (conexão TCP).
-- **MariaDB recusou a conexão**: o banco não aceita TCP. Use no `.env`
-  `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` e crie o usuário como `'switchboard'@'localhost'`.
+- **acesso negado**: refaça o passo 3 (usuário para `127.0.0.1` **e** `localhost`) usando exatamente
+  a senha do `CDR_DB_PASSWORD`. Se o teste `mysql -h 127.0.0.1 -u switchboard -p ...` funciona mas o
+  switchboard não, o problema está no `.env`: espaço no fim da senha, aspas a mais ou a linha
+  `CDR_DB_PASSWORD` repetida (vale a primeira).
+- **MariaDB recusou a conexão**: o banco não aceita TCP. Adicione ao `.env`
+  `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` (o usuário `'switchboard'@'localhost'` do passo 3 cobre esse caso).
 - **sem permissão de leitura**: faltou o `GRANT SELECT ON asteriskcdrdb.cdr ...`.
 
 Depois de corrigir o `.env`, reinicie: `systemctl restart switchboard`.
