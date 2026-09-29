@@ -1,0 +1,19 @@
+{
+  "name": "switchboard-issabel",
+  "version": "1.0.0",
+  "description": "Switchboard (mesa operadora) para Issabel/Asterisk com click-to-call — identidade visual Intek Telecomunicações",
+  "main": "server/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "MOCK_PBX=1 node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

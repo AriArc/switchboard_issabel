@@ -1,0 +1,453 @@
+'use strict';
+
+(() => {
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const icon = (id) => `<svg class="icon"><use href="#i-${id}"/></svg>`;
+
+  const STATUS_LABEL = {
+    idle: 'Livre', inuse: 'Em ligação', busy: 'Ocupado', ringing: 'Tocando', onhold: 'Em espera', unavailable: 'Indisponível',
+  };
+  const ROLE_LABEL = { admin: 'Administrador', operator: 'Operador', user: 'Usuário' };
+
+  const state = {
+    me: null,
+    pbx: { connected: false, extensions: [], calls: [] },
+    clockOffset: 0,
+    filter: 'all',
+    search: '',
+    view: 'painel',
+    users: [],
+    editingUser: null,
+    transferCall: null,
+    ws: null,
+  };
+
+  // ---------- API ----------
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && url !== '/api/login') showLogin();
+    if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
+    return data;
+  }
+
+  function toast(message, type = 'ok') {
+    const el = document.createElement('div');
+    el.className = `toast ${type === 'err' ? 'err' : ''}`;
+    el.innerHTML = `${icon(type === 'err' ? 'x' : 'check')}<span>${esc(message)}</span>`;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  }
+
+  const initials = (name, fallback) => {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return esc(String(fallback || '?').slice(-2));
+    return esc((parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase());
+  };
+
+  const fmtDuration = (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const pad = (n) => String(n).padStart(2, '0');
+    return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
+  };
+  const now = () => Date.now() + state.clockOffset;
+
+  // ---------- Sessão ----------
+  function showLogin() {
+    if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
+    state.me = null;
+    $('#app-view').hidden = true;
+    $('#login-view').hidden = false;
+    $('#login-user').focus();
+  }
+
+  function showApp() {
+    const me = state.me;
+    $('#login-view').hidden = true;
+    $('#app-view').hidden = false;
+    $('#me-name').textContent = me.name;
+    $('#me-role').textContent = ROLE_LABEL[me.role] || me.role;
+    $('#me-avatar').innerHTML = initials(me.name);
+    $('#me-ext').textContent = me.extension || '—';
+    $('#origin-ext').textContent = me.extension ? `Ramal ${me.extension}` : 'Não definido';
+    $('#dial-btn').disabled = !me.extension;
+    const hint = $('#dial-hint');
+    hint.hidden = Boolean(me.extension);
+    hint.textContent = 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
+    $$('[data-admin]').forEach((el) => { el.hidden = me.role !== 'admin'; });
+    connectWs();
+    route();
+    handleCallParam();
+  }
+
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('#login-error').textContent = '';
+    try {
+      const { user } = await api('POST', '/api/login', {
+        username: $('#login-user').value.trim(),
+        password: $('#login-pass').value,
+      });
+      $('#login-pass').value = '';
+      state.me = user;
+      showApp();
+    } catch (err) {
+      $('#login-error').textContent = err.message;
+    }
+  });
+
+  $('#logout-btn').addEventListener('click', async () => {
+    await api('POST', '/api/logout').catch(() => {});
+    showLogin();
+  });
+
+  // ---------- Tempo real ----------
+  function connectWs() {
+    if (state.ws) return;
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    state.ws = ws;
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'state') {
+        state.pbx = msg.data;
+        state.clockOffset = msg.data.serverTime - Date.now();
+        renderPbx();
+      }
+    };
+    ws.onclose = (ev) => {
+      state.ws = null;
+      setConn(false, 'Reconectando…');
+      if (ev.code === 4001) return showLogin();
+      // Confere se a sessão ainda é válida antes de reconectar
+      setTimeout(() => state.me && api('GET', '/api/me').then(() => connectWs()).catch(() => {}), 2000);
+    };
+  }
+
+  function setConn(on, text) {
+    const el = $('#conn');
+    el.className = `conn ${on ? 'on' : 'off'}`;
+    $('.txt', el).textContent = text;
+  }
+
+  // ---------- Painel ----------
+  function renderPbx() {
+    const { extensions, calls, connected } = state.pbx;
+    setConn(connected, connected ? 'PABX conectado' : 'PABX desconectado');
+
+    const count = (fn) => extensions.filter(fn).length;
+    $('#k-free').textContent = count((e) => e.status === 'idle');
+    $('#k-busy').textContent = count((e) => ['inuse', 'busy', 'onhold'].includes(e.status));
+    $('#k-ring').textContent = count((e) => e.status === 'ringing');
+    $('#k-calls').textContent = calls.length;
+
+    renderExtensions();
+    renderCalls();
+    $('#ext-options').innerHTML = extensions
+      .map((e) => `<option value="${esc(e.exten)}">${esc(e.name || '')}</option>`)
+      .join('');
+  }
+
+  function statusGroup(s) {
+    return s === 'busy' || s === 'onhold' ? 'inuse' : s;
+  }
+
+  function renderExtensions() {
+    const q = state.search.toLowerCase();
+    const list = state.pbx.extensions.filter((e) =>
+      (state.filter === 'all' || statusGroup(e.status) === state.filter) &&
+      (!q || e.exten.includes(q) || (e.name || '').toLowerCase().includes(q))
+    );
+    const grid = $('#ext-grid');
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${icon('search')}<div>${
+        state.pbx.extensions.length ? 'Nenhum ramal encontrado' : 'Aguardando dados do PABX…'
+      }</div></div>`;
+      return;
+    }
+    const myExt = state.me && state.me.extension;
+    grid.innerHTML = list.map((e) => {
+      const mine = e.exten === myExt;
+      const canCall = !mine && myExt && e.status !== 'unavailable';
+      const peer = e.call
+        ? `<span class="peer">${icon('phone')} ${esc(e.call.peer)} · <span data-since="${e.call.since}">${fmtDuration(now() - e.call.since)}</span></span>`
+        : `<span class="pill">${esc(STATUS_LABEL[e.status] || e.status)}</span>`;
+      return `<div class="ext st-${esc(e.status)}${mine ? ' mine' : ''}">
+        <div class="ext-top">
+          <div class="avatar">${initials(e.name, e.exten)}<span class="st"></span></div>
+          <div class="ext-info"><div class="ext-name" title="${esc(e.name)}">${esc(e.name || `Ramal ${e.exten}`)}${mine ? ' <small class="ext-num">(você)</small>' : ''}</div><div class="ext-num">Ramal ${esc(e.exten)}</div></div>
+        </div>
+        <div class="ext-bottom">${peer}
+          <button class="call-btn" type="button" data-call="${esc(e.exten)}" ${canCall ? '' : 'disabled'} title="${
+            canCall ? `Ligar para ${esc(e.name || e.exten)}` : mine ? 'Seu ramal' : 'Indisponível'
+          }" aria-label="Ligar para ramal ${esc(e.exten)}">${icon('phone')}</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCalls() {
+    const calls = state.pbx.calls;
+    $('#calls-count').textContent = calls.length;
+    const el = $('#calls');
+    if (!calls.length) {
+      el.innerHTML = `<div class="empty">${icon('phone')}<div>Nenhuma chamada em andamento</div></div>`;
+      return;
+    }
+    const me = state.me;
+    const canManage = (c) => me.role !== 'user' || (me.extension && c.extensions.includes(me.extension));
+    el.innerHTML = calls.map((c) => {
+      const since = c.answeredAt || c.startedAt;
+      const up = c.state === 'up';
+      return `<div class="call">
+        <div class="call-parties">
+          <div class="party"><b>${esc(c.fromName || c.from || 'Desconhecido')}</b><span>${esc(c.from)}</span></div>
+          <svg class="icon call-arrow"><use href="#i-arrow"/></svg>
+          <div class="party right"><b>${esc(c.toName || c.to || '—')}</b><span>${esc(c.to)}</span></div>
+        </div>
+        <div class="call-meta">
+          <span class="pill ${up ? 'st-inuse' : 'st-ringing'}">${up ? 'Em ligação' : 'Chamando'} · <span class="timer" data-since="${since}">${fmtDuration(now() - since)}</span></span>
+          ${canManage(c) ? `<div class="call-actions">
+            <button class="btn btn-teal" type="button" data-transfer="${esc(c.id)}" title="Transferir">${icon('transfer')}</button>
+            <button class="btn btn-danger" type="button" data-hangup="${esc(c.id)}" title="Desligar">${icon('phone-off')}</button>
+          </div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Atualiza cronômetros sem re-renderizar tudo
+  setInterval(() => {
+    $$('[data-since]').forEach((el) => { el.textContent = fmtDuration(now() - Number(el.dataset.since)); });
+  }, 1000);
+
+  $('#filters').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-filter]');
+    if (!chip) return;
+    state.filter = chip.dataset.filter;
+    $$('#filters .chip').forEach((c) => c.classList.toggle('active', c === chip));
+    renderExtensions();
+  });
+  $('#search').addEventListener('input', (e) => { state.search = e.target.value.trim(); renderExtensions(); });
+
+  // ---------- Click to call ----------
+  async function clickToCall(number) {
+    number = String(number || '').trim();
+    if (!number) return toast('Informe o número de destino', 'err');
+    const btn = $('#dial-btn');
+    btn.disabled = true;
+    try {
+      const res = await api('POST', '/api/call', { number });
+      toast(`Seu ramal ${res.extension} vai tocar. Atenda para ligar para ${res.number}.`);
+    } catch (err) {
+      toast(err.message, 'err');
+    } finally {
+      btn.disabled = !state.me.extension;
+    }
+  }
+
+  const KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'], ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['*', ''], ['0', '+'], ['#', '']];
+  $('#keypad').innerHTML = KEYS.map(([k, sub]) => `<button class="key" type="button" data-key="${k}">${k}<small>${sub || '&nbsp;'}</small></button>`).join('');
+  $('#keypad').addEventListener('click', (e) => {
+    const key = e.target.closest('[data-key]');
+    if (!key) return;
+    const input = $('#dial-number');
+    input.value += key.dataset.key;
+    input.focus();
+  });
+  $('#dial-back').addEventListener('click', () => {
+    const input = $('#dial-number');
+    input.value = input.value.slice(0, -1);
+    input.focus();
+  });
+  $('#dial-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    clickToCall($('#dial-number').value);
+  });
+
+  document.addEventListener('click', (e) => {
+    const call = e.target.closest('[data-call]');
+    if (call && !call.disabled) {
+      $('#dial-number').value = call.dataset.call;
+      clickToCall(call.dataset.call);
+      return;
+    }
+    const hang = e.target.closest('[data-hangup]');
+    if (hang) {
+      api('POST', `/api/calls/${encodeURIComponent(hang.dataset.hangup)}/hangup`)
+        .then(() => toast('Chamada encerrada'))
+        .catch((err) => toast(err.message, 'err'));
+      return;
+    }
+    const tr = e.target.closest('[data-transfer]');
+    if (tr) openTransfer(tr.dataset.transfer);
+  });
+
+  // Link direto: /?call=11999990000 (ex.: integração com CRM)
+  function handleCallParam() {
+    const params = new URLSearchParams(location.search);
+    let number = params.get('call');
+    if (!number) return;
+    number = number.replace(/^tel:/i, '');
+    history.replaceState(null, '', location.pathname + location.hash);
+    $('#dial-number').value = number;
+    if (state.me.extension && confirm(`Ligar para ${number} pelo ramal ${state.me.extension}?`)) clickToCall(number);
+  }
+
+  // ---------- Transferência ----------
+  function openTransfer(callId) {
+    state.transferCall = callId;
+    $('#transfer-error').textContent = '';
+    $('#t-target').value = '';
+    $('#transfer-modal').hidden = false;
+    $('#t-target').focus();
+  }
+  $('#transfer-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('POST', `/api/calls/${encodeURIComponent(state.transferCall)}/transfer`, { target: $('#t-target').value });
+      $('#transfer-modal').hidden = true;
+      toast('Chamada transferida');
+    } catch (err) {
+      $('#transfer-error').textContent = err.message;
+    }
+  });
+
+  // ---------- Usuários ----------
+  async function loadUsers() {
+    try {
+      state.users = (await api('GET', '/api/users')).users;
+      renderUsers();
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  }
+
+  function renderUsers() {
+    const extName = (x) => (state.pbx.extensions.find((e) => e.exten === x) || {}).name;
+    $('#users-body').innerHTML = state.users.map((u) => `<tr>
+      <td><div class="me-row"><div class="avatar">${initials(u.name)}</div><b>${esc(u.name)}</b></div></td>
+      <td>${esc(u.username)}</td>
+      <td>${u.extension ? `<span class="badge ramal">${esc(u.extension)}</span> <span class="hint">${esc(extName(u.extension) || '')}</span>` : '<span class="hint">—</span>'}</td>
+      <td><span class="badge ${esc(u.role)}">${esc(ROLE_LABEL[u.role] || u.role)}</span></td>
+      <td>${u.active ? '<span class="badge">Ativo</span>' : '<span class="badge inactive">Inativo</span>'}</td>
+      <td style="text-align:right">
+        <button class="btn btn-icon btn-ghost" type="button" data-edit-user="${esc(u.id)}" title="Editar">${icon('edit')}</button>
+        ${u.id === state.me.id ? '' : `<button class="btn btn-icon btn-ghost" type="button" data-del-user="${esc(u.id)}" title="Excluir">${icon('trash')}</button>`}
+      </td>
+    </tr>`).join('');
+  }
+
+  function openUserModal(user) {
+    state.editingUser = user || null;
+    const f = $('#user-form');
+    f.reset();
+    $('#user-error').textContent = '';
+    $('#user-modal-title').textContent = user ? 'Editar usuário' : 'Novo usuário';
+    $('#u-password').required = !user;
+    $('#u-password').placeholder = user ? 'Deixe em branco para manter' : '';
+    if (user) {
+      $('#u-name').value = user.name;
+      $('#u-username').value = user.username;
+      $('#u-extension').value = user.extension || '';
+      $('#u-role').value = user.role;
+      $('#u-active').checked = user.active;
+    }
+    $('#user-modal').hidden = false;
+    $('#u-name').focus();
+  }
+
+  $('#new-user-btn').addEventListener('click', () => openUserModal());
+  $('#users-body').addEventListener('click', async (e) => {
+    const edit = e.target.closest('[data-edit-user]');
+    if (edit) return openUserModal(state.users.find((u) => u.id === edit.dataset.editUser));
+    const del = e.target.closest('[data-del-user]');
+    if (del) {
+      const u = state.users.find((x) => x.id === del.dataset.delUser);
+      if (!confirm(`Excluir o usuário ${u.name}?`)) return;
+      try {
+        await api('DELETE', `/api/users/${encodeURIComponent(u.id)}`);
+        toast('Usuário excluído');
+        loadUsers();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+  });
+
+  $('#user-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      name: $('#u-name').value.trim(),
+      username: $('#u-username').value.trim().toLowerCase(),
+      extension: $('#u-extension').value.trim(),
+      role: $('#u-role').value,
+      active: $('#u-active').checked,
+    };
+    const pwd = $('#u-password').value;
+    if (pwd) body.password = pwd;
+    try {
+      const editing = state.editingUser;
+      const { user } = editing
+        ? await api('PUT', `/api/users/${encodeURIComponent(editing.id)}`, body)
+        : await api('POST', '/api/users', body);
+      $('#user-modal').hidden = true;
+      toast(editing ? 'Usuário atualizado' : 'Usuário criado');
+      if (user.id === state.me.id) { state.me = user; showApp(); }
+      loadUsers();
+    } catch (err) {
+      $('#user-error').textContent = err.message;
+    }
+  });
+
+  // Fechar modais
+  $$('.modal-backdrop').forEach((m) => {
+    m.addEventListener('click', (e) => {
+      if (e.target === m || e.target.closest('[data-close]')) m.hidden = true;
+    });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $$('.modal-backdrop').forEach((m) => { m.hidden = true; });
+  });
+
+  // ---------- Navegação ----------
+  function route() {
+    let view = (location.hash || '#painel').slice(1);
+    if (view === 'usuarios' && state.me.role !== 'admin') view = 'painel';
+    if (!['painel', 'usuarios'].includes(view)) view = 'painel';
+    state.view = view;
+    $('#view-painel').hidden = view !== 'painel';
+    $('#view-usuarios').hidden = view !== 'usuarios';
+    $('#view-title').textContent = view === 'painel' ? 'Painel' : 'Usuários';
+    $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === view));
+    $('.shell').classList.remove('nav-open');
+    if (view === 'usuarios') loadUsers();
+  }
+  window.addEventListener('hashchange', () => state.me && route());
+  $('#menu-btn').addEventListener('click', () => $('.shell').classList.toggle('nav-open'));
+
+  // ---------- Tema ----------
+  const savedTheme = (() => { try { return localStorage.getItem('sb-theme'); } catch { return null; } })();
+  if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+  $('#theme-btn').addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('sb-theme', next); } catch { /* ignora */ }
+  });
+
+  // ---------- Início ----------
+  api('GET', '/api/me')
+    .then(({ user }) => { state.me = user; showApp(); })
+    .catch(() => showLogin());
+})();

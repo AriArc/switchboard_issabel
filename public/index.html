@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Switchboard Intek</title>
+  <meta name="theme-color" content="#3d756c">
+  <link rel="icon" href="img/intek-logo.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <!-- Ícones -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M10.7 13.3a16 16 0 0 0 3.4 2.6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L9 10.9"/><path d="M22 2 2 22"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M21 5H9l-7 7 7 7h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM18 9l-6 6M12 9l6 6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-transfer" viewBox="0 0 24 24"><path d="M17 3l4 4-4 4M21 7H9M7 21l-4-4 4-4M3 17h12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-ring" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  </svg>
+
+  <!-- Login -->
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <img class="login-logo" src="img/intek-logo.png" alt="Intek Telecomunicações">
+      <h1>Switchboard</h1>
+      <p class="sub">Mesa operadora e click-to-call</p>
+      <div class="field">
+        <label for="login-user">Usuário</label>
+        <input class="input" id="login-user" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="login-pass">Senha</label>
+        <input class="input" id="login-pass" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="error-text" id="login-error"></div>
+      <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <!-- Aplicação -->
+  <div id="app-view" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><img src="img/intek-logo.png" alt="Intek Telecomunicações"></div>
+      <div class="brand-stripe"></div>
+      <nav class="nav">
+        <a href="#painel" data-view="painel"><svg class="icon"><use href="#i-grid"/></svg>Painel</a>
+        <a href="#usuarios" data-view="usuarios" data-admin><svg class="icon"><use href="#i-users"/></svg>Usuários</a>
+      </nav>
+      <div class="spacer"></div>
+      <div class="me">
+        <div class="me-row">
+          <div class="avatar" id="me-avatar"></div>
+          <div>
+            <div class="me-name" id="me-name"></div>
+            <div class="me-role" id="me-role"></div>
+          </div>
+        </div>
+        <div class="me-ext"><span>Ramal discador</span><strong id="me-ext">—</strong></div>
+        <button class="btn btn-block" id="logout-btn" type="button"><svg class="icon"><use href="#i-logout"/></svg>Sair</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="btn btn-icon btn-ghost menu-btn" id="menu-btn" type="button" aria-label="Menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <h2 id="view-title">Painel</h2>
+        <div class="grow"></div>
+        <span class="conn" id="conn"><span class="dot"></span><span class="txt">Conectando…</span></span>
+        <button class="btn btn-icon btn-ghost" id="theme-btn" type="button" aria-label="Alternar tema"><svg class="icon"><use href="#i-moon"/></svg></button>
+      </header>
+
+      <!-- Painel -->
+      <div class="content" id="view-painel">
+        <div class="kpis">
+          <div class="card kpi k1"><div class="ic"><svg class="icon"><use href="#i-check"/></svg></div><div><div class="val" id="k-free">0</div><div class="lbl">Ramais livres</div></div></div>
+          <div class="card kpi k2"><div class="ic"><svg class="icon"><use href="#i-phone"/></svg></div><div><div class="val" id="k-busy">0</div><div class="lbl">Em ligação</div></div></div>
+          <div class="card kpi k3"><div class="ic"><svg class="icon"><use href="#i-ring"/></svg></div><div><div class="val" id="k-ring">0</div><div class="lbl">Tocando</div></div></div>
+          <div class="card kpi k4"><div class="ic"><svg class="icon"><use href="#i-activity"/></svg></div><div><div class="val" id="k-calls">0</div><div class="lbl">Chamadas ativas</div></div></div>
+        </div>
+
+        <div class="dash">
+          <section class="card">
+            <div class="card-head">
+              <h3>Ramais</h3>
+              <div class="chips" id="filters">
+                <button class="chip active" data-filter="all" type="button">Todos</button>
+                <button class="chip" data-filter="idle" type="button">Livres</button>
+                <button class="chip" data-filter="inuse" type="button">Ocupados</button>
+                <button class="chip" data-filter="ringing" type="button">Tocando</button>
+                <button class="chip" data-filter="unavailable" type="button">Indisponíveis</button>
+              </div>
+              <div class="grow"></div>
+              <label class="search"><svg class="icon"><use href="#i-search"/></svg><input class="input" id="search" placeholder="Buscar nome ou ramal" type="search"></label>
+            </div>
+            <div class="card-body"><div class="ext-grid" id="ext-grid"></div></div>
+          </section>
+
+          <div class="side-col">
+            <section class="card dialer">
+              <div class="dialer-head">
+                <svg class="icon"><use href="#i-phone"/></svg>
+                <div><h3>Click to call</h3><small>Seu ramal toca primeiro; ao atender, o destino é discado.</small></div>
+              </div>
+              <form class="card-body" id="dial-form">
+                <div class="origin">
+                  <div><div class="lbl">Discar pelo ramal</div><div class="val" id="origin-ext">—</div></div>
+                  <svg class="icon lock" aria-label="Definido no cadastro do usuário"><title>Definido no cadastro do usuário</title><use href="#i-lock"/></svg>
+                </div>
+                <input class="input number-input" id="dial-number" inputmode="tel" autocomplete="off" placeholder="Número ou ramal" aria-label="Número de destino">
+                <div class="keypad" id="keypad"></div>
+                <div class="dial-actions">
+                  <button class="btn btn-primary" type="submit" id="dial-btn"><svg class="icon"><use href="#i-phone"/></svg>Ligar</button>
+                  <button class="btn" type="button" id="dial-back" aria-label="Apagar"><svg class="icon"><use href="#i-back"/></svg></button>
+                </div>
+                <p class="hint" id="dial-hint" hidden></p>
+              </form>
+            </section>
+
+            <section class="card">
+              <div class="card-head"><h3>Chamadas ativas</h3><div class="grow"></div><span class="badge" id="calls-count">0</span></div>
+              <div class="card-body"><div class="calls" id="calls"></div></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- Usuários -->
+      <div class="content" id="view-usuarios" hidden>
+        <section class="card">
+          <div class="card-head">
+            <h3>Usuários e ramais discadores</h3>
+            <div class="grow"></div>
+            <button class="btn btn-primary" id="new-user-btn" type="button"><svg class="icon"><use href="#i-plus"/></svg>Novo usuário</button>
+          </div>
+          <div class="card-body table-wrap">
+            <table>
+              <thead><tr><th>Nome</th><th>Usuário</th><th>Ramal discador</th><th>Perfil</th><th>Status</th><th></th></tr></thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal de usuário -->
+  <div class="modal-backdrop" id="user-modal" hidden>
+    <form class="modal" id="user-form" autocomplete="off">
+      <div class="modal-head"><h3 id="user-modal-title">Novo usuário</h3><button class="btn btn-icon btn-ghost" type="button" data-close aria-label="Fechar"><svg class="icon"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label for="u-name">Nome</label><input class="input" id="u-name" name="name" required></div>
+        <div class="row2">
+          <div class="field"><label for="u-username">Usuário</label><input class="input" id="u-username" name="username" required pattern="[a-zA-Z0-9._\-]{3,32}"></div>
+          <div class="field"><label for="u-password">Senha</label><input class="input" id="u-password" name="password" type="password" autocomplete="new-password" minlength="6"></div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="u-extension">Ramal discador</label>
+            <input class="input" id="u-extension" name="extension" list="ext-options" inputmode="numeric" pattern="\d{2,8}">
+            <datalist id="ext-options"></datalist>
+          </div>
+          <div class="field">
+            <label for="u-role">Perfil</label>
+            <select class="input" id="u-role" name="role">
+              <option value="user">Usuário</option>
+              <option value="operator">Operador (mesa)</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint">O click-to-call deste usuário sempre usará o ramal discador cadastrado aqui.</p>
+        <label class="switch"><input type="checkbox" id="u-active" name="active" checked> Usuário ativo</label>
+        <div class="error-text" id="user-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" type="button" data-close>Cancelar</button>
+        <button class="btn btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Transferência -->
+  <div class="modal-backdrop" id="transfer-modal" hidden>
+    <form class="modal" id="transfer-form" autocomplete="off">
+      <div class="modal-head"><h3>Transferir chamada</h3><button class="btn btn-icon btn-ghost" type="button" data-close aria-label="Fechar"><svg class="icon"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label for="t-target">Destino (ramal ou número)</label><input class="input" id="t-target" list="ext-options" required></div>
+        <div class="error-text" id="transfer-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" type="button" data-close>Cancelar</button>
+        <button class="btn btn-teal" type="submit"><svg class="icon"><use href="#i-transfer"/></svg>Transferir</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="js/app.js"></script>
+</body>
+</html>
