@@ -19,6 +19,8 @@ function httpError(status, message) {
 function createApp({ config, users, pbx, cdr = null }) {
   const app = express();
   app.disable('x-powered-by');
+  // Atrás de um proxy local (Apache/nginx): usa o IP real do cliente e o protocolo HTTPS informado pelo proxy
+  app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '32kb' }));
 
   app.use((req, res, next) => {

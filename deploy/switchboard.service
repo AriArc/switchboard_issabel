@@ -1,0 +1,17 @@
+# /etc/systemd/system/switchboard.service
+[Unit]
+Description=Switchboard Intek (Issabel)
+After=network.target asterisk.service mariadb.service
+
+[Service]
+Type=simple
+User=switchboard
+Group=switchboard
+WorkingDirectory=/opt/switchboard_issabel
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

@@ -21,6 +21,8 @@ const env = process.env;
 
 module.exports = {
   port: Number(env.PORT || 8080),
+  // 127.0.0.1 = só aceita conexões locais (use quando houver proxy HTTPS na frente)
+  host: env.HOST || '0.0.0.0',
   sessionSecret: env.SESSION_SECRET || 'dev-secret-change-me',
   sessionTtlHours: Number(env.SESSION_TTL_HOURS || 12),
   dataFile: env.DATA_FILE || path.join(__dirname, '..', 'data', 'users.json'),
@@ -43,6 +45,7 @@ module.exports = {
         password: env.CDR_DB_PASSWORD || '',
         database: env.CDR_DB_NAME || 'asteriskcdrdb',
         table: env.CDR_DB_TABLE || 'cdr',
+        socketPath: env.CDR_DB_SOCKET || undefined,
       }
     : null,
 

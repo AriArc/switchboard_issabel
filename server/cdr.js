@@ -72,6 +72,7 @@ class MysqlCdr {
     this.pool = mysql.createPool({
       host: dbConfig.host,
       port: dbConfig.port,
+      socketPath: dbConfig.socketPath,
       user: dbConfig.user,
       password: dbConfig.password,
       database: dbConfig.database,

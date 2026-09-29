@@ -51,6 +51,6 @@ pbx.on('change', () => {
 });
 
 pbx.start();
-server.listen(config.port, () => {
-  console.log(`Switchboard Intek em http://localhost:${config.port} ${config.mock ? '(PABX simulado)' : ''}`);
+server.listen(config.port, config.host, () => {
+  console.log(`Switchboard Intek em http://${config.host}:${config.port} ${config.mock ? '(PABX simulado)' : ''}`);
 });
