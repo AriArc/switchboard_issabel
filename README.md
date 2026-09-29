@@ -28,10 +28,10 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 Este guia considera o **Issabel 5 (Rocky Linux 8)** e o **switchboard na mesma VPS**:
 
 ```
- Usuários (navegador) ──HTTPS──▶ https://<IP-publico>:8443
-                                   │  Apache do Issabel (proxy)
-                                   ▼
-                          switchboard 127.0.0.1:8080
+ Usuários (navegador) ──HTTP──▶ http://<IP-publico>:8443
+                                        │
+                                        ▼
+                           switchboard (porta 8443)
                              │                 │
                     AMI 127.0.0.1:5038   MariaDB 127.0.0.1:3306
                              └──── Issabel ────┘
@@ -41,7 +41,8 @@ Este guia considera o **Issabel 5 (Rocky Linux 8)** e o **switchboard na mesma V
 - Todos os ramais são **PJSIP**.
 - O switchboard conversa com o Asterisk (AMI) e com o banco de CDR **pela própria máquina** (`127.0.0.1`).
   As portas **5038 e 3306 não precisam e não devem** ficar abertas para a internet.
-- As portas 80/443 já são usadas pela interface do Issabel; o switchboard é publicado na **8443**.
+- As portas 80/443 já são usadas pela interface do Issabel; o switchboard atende direto na **8443**, em HTTP
+  (sem certificado). Veja [Segurança sem HTTPS](#segurança-sem-https).
 
 Todos os comandos abaixo são executados como `root` na VPS.
 
@@ -105,8 +106,8 @@ Sem `CDR_DB_HOST` configurado, o restante do sistema funciona normalmente e a ab
 Edite `/opt/switchboard_issabel/.env`:
 
 ```ini
-PORT=8080
-HOST=127.0.0.1
+PORT=8443
+HOST=0.0.0.0
 SESSION_SECRET=<saída de: openssl rand -hex 32>
 
 AMI_HOST=127.0.0.1
@@ -139,55 +140,22 @@ systemctl status switchboard          # deve mostrar "active (running)"
 journalctl -u switchboard -f          # logs; deve aparecer "[ami] conectado em 127.0.0.1:5038"
 ```
 
-## 6. Publicar com HTTPS pelo Apache do Issabel
+## 6. Se você já configurou o Apache/HTTPS antes, desfaça
 
-Como o acesso é pelo IP público (sem domínio), o HTTPS usa um **certificado autoassinado** gerado
-para esse IP. Troque `203.0.113.10` pelo IP público da sua VPS:
-
-```bash
-IP=203.0.113.10
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-  -subj "/CN=$IP/O=Intek Telecomunicacoes" \
-  -addext "subjectAltName=IP:$IP" \
-  -addext "basicConstraints=critical,CA:TRUE" \
-  -addext "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign" \
-  -addext "extendedKeyUsage=serverAuth" \
-  -keyout /etc/pki/tls/private/switchboard.key \
-  -out /etc/pki/tls/certs/switchboard.crt
-chmod 600 /etc/pki/tls/private/switchboard.key
-```
-
-Depois ative o proxy:
+Numa versão anterior deste guia o Apache publicava o switchboard na 8443. Agora o próprio switchboard usa
+essa porta, então o Apache precisa liberá-la (senão o serviço não sobe com erro `EADDRINUSE`):
 
 ```bash
-cp /opt/switchboard_issabel/deploy/apache-switchboard.conf /etc/httpd/conf.d/switchboard.conf
-apachectl configtest                  # deve responder "Syntax OK"
+rm -f /etc/httpd/conf.d/switchboard.conf
 systemctl reload httpd
+systemctl restart switchboard
 ```
 
-### Aviso de "conexão não segura" no navegador
-
-O tráfego fica criptografado, mas como o certificado não é emitido por uma autoridade pública, o
-navegador mostra um aviso. Há duas opções:
-
-- **Aceitar o aviso** em cada computador: *Avançado → Continuar para o site*. É preciso fazer uma vez por navegador.
-- **Instalar o certificado como confiável** nos computadores dos usuários para o aviso sumir de vez.
-  Copie `/etc/pki/tls/certs/switchboard.crt` da VPS (ex.: via WinSCP) e:
-  - **Windows** (Chrome/Edge): dê dois cliques no arquivo → *Instalar Certificado* → *Máquina Local* →
-    *Colocar todos os certificados no repositório a seguir* → **Autoridades de Certificação Raiz Confiáveis** → Concluir.
-    Reinicie o navegador.
-  - **Firefox**: *Configurações → Privacidade e Segurança → Certificados → Ver certificados →
-    Autoridades → Importar* → marque "Confiar nesta CA para identificar sites".
-
-  Em empresas com Active Directory, o certificado pode ser distribuído para todas as máquinas por GPO.
-
-> Se o IP público da VPS mudar, gere o certificado de novo com o IP novo e reinstale nos computadores.
-> Se no futuro houver um domínio apontando para a VPS, dá para usar um certificado gratuito do Let's Encrypt
-> e o aviso deixa de existir sem instalar nada nos computadores.
+Se nunca criou esse arquivo, pule este passo.
 
 ## 7. Liberar a porta 8443 no firewall
 
-Libere **apenas a porta 8443/TCP**. As portas 5038, 3306 e 8080 continuam fechadas para a internet.
+Libere **apenas a porta 8443/TCP**. As portas 5038 e 3306 continuam fechadas para a internet.
 
 - **Firewall do Issabel** (pela interface web):
   1. *Segurança → Firewall → Definir Portas*: crie a porta **Switchboard**, protocolo **TCP**, porta **8443**.
@@ -216,11 +184,22 @@ Libere **apenas a porta 8443/TCP**. As portas 5038, 3306 e 8080 continuam fechad
 
 ## 8. Primeiro acesso
 
-Acesse `https://<IP-publico-da-VPS>:8443` e entre com `ADMIN_USER` / `ADMIN_PASSWORD`.
+Acesse `http://<IP-publico-da-VPS>:8443` (com **http**, não https) e entre com `ADMIN_USER` / `ADMIN_PASSWORD`.
 **Troque a senha do administrador logo após o primeiro acesso.**
 
 Em **Usuários → Novo usuário**, informe nome, login, senha, perfil e o **ramal discador**.
 O campo sugere os ramais lidos do Issabel. Cada ramal só pode ser associado a um usuário.
+
+## Segurança sem HTTPS
+
+Sem certificado, o tráfego entre o navegador e a VPS **não é criptografado**: as senhas de login
+passam abertas pela internet, e o navegador mostra "Não seguro" na barra de endereço. Para reduzir o risco:
+
+- Se os usuários acessam de um escritório com **IP fixo**, restrinja a regra do firewall a esse IP:
+  em *Endereço de Origem* use `<IP-do-escritório>` / `32` em vez de `0.0.0.0` / `0`.
+- Use senhas exclusivas para o switchboard (não repita a senha do Issabel ou do e-mail).
+- Se no futuro houver um domínio apontando para a VPS, dá para ativar HTTPS com um certificado gratuito
+  (Let's Encrypt) sem aviso no navegador.
 
 ## Atualizar para uma nova versão
 
@@ -241,17 +220,17 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | Painel sem ramais ou sem nomes | Permissões `command` e `reporting` no usuário AMI; `HINT_CONTEXT=ext-local` |
 | Click-to-call não toca o ramal | `CHANNEL_TECH=PJSIP`; ramal registrado (`asterisk -rx "pjsip show contacts"`) |
 | Aba Histórico: "Não foi possível consultar" | Usuário `'switchboard'@'127.0.0.1'` e senha do CDR. Se o MariaDB não escuta em TCP, use `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` e crie o usuário como `'switchboard'@'localhost'` |
-| Painel não atualiza em tempo real | Módulo `proxy_wstunnel` do Apache (`httpd -M \| grep wstunnel`) |
-| Navegador avisa "conexão não segura" | Esperado com certificado autoassinado; veja o passo 6 para instalar o certificado nos computadores |
-| `https://IP:8443` não abre | Regra da 8443 no firewall do Issabel / firewalld / painel da VPS; `systemctl status httpd` |
-| Erro 503 no navegador | `systemctl status switchboard` (serviço parado) |
+| Navegador mostra "Não seguro" | Esperado: o acesso é HTTP, sem certificado |
+| Erro "Sua conexão não é particular" | O endereço foi digitado com `https://`; use `http://IP:8443` |
+| `http://IP:8443` não abre | `systemctl status switchboard`; regra da 8443 no firewall do Issabel / firewalld / painel da VPS |
+| Serviço não sobe com `EADDRINUSE` | Outro programa usa a 8443 (ex.: o Apache do passo 6): `ss -ltnp \| grep 8443` |
 
 ### Variáveis de ambiente
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `PORT` | `8080` | Porta HTTP do switchboard |
-| `HOST` | `0.0.0.0` | Endereço de escuta (`127.0.0.1` atrás do Apache) |
+| `PORT` | `8080` | Porta HTTP do switchboard (neste guia, `8443`) |
+| `HOST` | `0.0.0.0` | Endereço de escuta (`0.0.0.0` = aceita acesso externo) |
 | `SESSION_SECRET` | — | Segredo para assinar as sessões (obrigatório em produção) |
 | `AMI_HOST` / `AMI_PORT` | `127.0.0.1` / `5038` | Endereço do AMI |
 | `AMI_USER` / `AMI_SECRET` | — | Credenciais do AMI |
@@ -275,7 +254,7 @@ npm run dev   # MOCK_PBX=1, PABX simulado com ramais e chamadas aleatórias
 
 ### Integração com CRM
 
-Abra `https://<IP-publico-da-VPS>:8443/?call=<número>` a partir do CRM. Após confirmar, o
+Abra `http://<IP-publico-da-VPS>:8443/?call=<número>` a partir do CRM. Após confirmar, o
 switchboard liga pelo ramal do usuário logado.
 
 ## Testes
@@ -300,7 +279,7 @@ server/
   users.js      cadastro de usuários (JSON) com hash scrypt
   auth.js       sessão por cookie assinado (HMAC)
 public/         interface web (HTML/CSS/JS, sem build)
-deploy/         serviço systemd e configuração do Apache
+deploy/         serviço systemd
 test/           testes (node:test)
 ```
 

@@ -50,6 +50,15 @@ pbx.on('change', () => {
   }
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[http] a porta ${config.port} já está em uso por outro programa (veja: ss -ltnp | grep ${config.port})`);
+  } else {
+    console.error('[http]', err.message);
+  }
+  process.exit(1);
+});
+
 pbx.start();
 server.listen(config.port, config.host, () => {
   console.log(`Switchboard Intek em http://${config.host}:${config.port} ${config.mock ? '(PABX simulado)' : ''}`);
