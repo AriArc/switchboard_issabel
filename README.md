@@ -18,7 +18,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 
 1. O usuário informa o destino e clica em **Ligar**.
 2. O servidor busca o ramal discador do usuário no cadastro e envia um `Originate` ao AMI:
-   `Channel: SIP/<ramal>` (ou `PJSIP/<ramal>`), `Context: from-internal`, `Exten: <destino>`.
+   `Channel: PJSIP/<ramal>`, `Context: from-internal`, `Exten: <destino>`.
 3. O telefone do usuário toca exibindo "Chamando &lt;destino&gt;". Ao atender, o Issabel disca o destino
    usando as rotas de saída normais. O número do CallerID é o ramal do usuário, então permissões,
    rotas e CDR funcionam como numa ligação feita pelo próprio aparelho.
@@ -28,7 +28,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 Este guia considera o **Issabel 5 (Rocky Linux 8)** e o **switchboard na mesma VPS**:
 
 ```
- Usuários (navegador) ──HTTPS──▶ IP público da VPS :8443
+ Usuários (navegador) ──HTTPS──▶ https://<IP-publico>:8443
                                    │  Apache do Issabel (proxy)
                                    ▼
                           switchboard 127.0.0.1:8080
@@ -37,7 +37,8 @@ Este guia considera o **Issabel 5 (Rocky Linux 8)** e o **switchboard na mesma V
                              └──── Issabel ────┘
 ```
 
-- Os usuários só acessam o **IP público** (ou domínio) da VPS para entrar no sistema.
+- Os usuários acessam direto o **IP público** da VPS (sem domínio) para entrar no sistema.
+- Todos os ramais são **PJSIP**.
 - O switchboard conversa com o Asterisk (AMI) e com o banco de CDR **pela própria máquina** (`127.0.0.1`).
   As portas **5038 e 3306 não precisam e não devem** ficar abertas para a internet.
 - As portas 80/443 já são usadas pela interface do Issabel; o switchboard é publicado na **8443**.
@@ -112,7 +113,7 @@ AMI_HOST=127.0.0.1
 AMI_USER=switchboard
 AMI_SECRET=uma-senha-forte-ami
 
-CHANNEL_TECH=SIP        # ou PJSIP (veja abaixo)
+CHANNEL_TECH=PJSIP
 
 CDR_DB_HOST=127.0.0.1
 CDR_DB_USER=switchboard
@@ -122,11 +123,10 @@ ADMIN_USER=admin
 ADMIN_PASSWORD=<senha inicial do administrador>
 ```
 
-**SIP ou PJSIP?** No Issabel, em *PBX → Extensões*, veja o tipo de dispositivo dos ramais, ou rode:
+Confira se os ramais PJSIP aparecem registrados (necessário para o click-to-call tocar o aparelho):
 
 ```bash
-asterisk -rx "sip show peers"        # lista ramais chan_sip  -> CHANNEL_TECH=SIP
-asterisk -rx "pjsip show endpoints"  # lista ramais PJSIP     -> CHANNEL_TECH=PJSIP
+asterisk -rx "pjsip show contacts"
 ```
 
 ## 5. Rodar como serviço
@@ -141,7 +141,23 @@ journalctl -u switchboard -f          # logs; deve aparecer "[ami] conectado em 
 
 ## 6. Publicar com HTTPS pelo Apache do Issabel
 
-O Apache do Issabel faz o HTTPS e repassa as requisições para o switchboard local:
+Como o acesso é pelo IP público (sem domínio), o HTTPS usa um **certificado autoassinado** gerado
+para esse IP. Troque `203.0.113.10` pelo IP público da sua VPS:
+
+```bash
+IP=203.0.113.10
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -subj "/CN=$IP/O=Intek Telecomunicacoes" \
+  -addext "subjectAltName=IP:$IP" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign" \
+  -addext "extendedKeyUsage=serverAuth" \
+  -keyout /etc/pki/tls/private/switchboard.key \
+  -out /etc/pki/tls/certs/switchboard.crt
+chmod 600 /etc/pki/tls/private/switchboard.key
+```
+
+Depois ative o proxy:
 
 ```bash
 cp /opt/switchboard_issabel/deploy/apache-switchboard.conf /etc/httpd/conf.d/switchboard.conf
@@ -149,9 +165,25 @@ apachectl configtest                  # deve responder "Syntax OK"
 systemctl reload httpd
 ```
 
-O arquivo usa o mesmo certificado da interface do Issabel. Se você usa outro certificado
-(ex.: Let's Encrypt para um domínio), ajuste `SSLCertificateFile`/`SSLCertificateKeyFile`.
-Com o certificado autoassinado padrão, o navegador mostra um aviso na primeira vez.
+### Aviso de "conexão não segura" no navegador
+
+O tráfego fica criptografado, mas como o certificado não é emitido por uma autoridade pública, o
+navegador mostra um aviso. Há duas opções:
+
+- **Aceitar o aviso** em cada computador: *Avançado → Continuar para o site*. É preciso fazer uma vez por navegador.
+- **Instalar o certificado como confiável** nos computadores dos usuários para o aviso sumir de vez.
+  Copie `/etc/pki/tls/certs/switchboard.crt` da VPS (ex.: via WinSCP) e:
+  - **Windows** (Chrome/Edge): dê dois cliques no arquivo → *Instalar Certificado* → *Máquina Local* →
+    *Colocar todos os certificados no repositório a seguir* → **Autoridades de Certificação Raiz Confiáveis** → Concluir.
+    Reinicie o navegador.
+  - **Firefox**: *Configurações → Privacidade e Segurança → Certificados → Ver certificados →
+    Autoridades → Importar* → marque "Confiar nesta CA para identificar sites".
+
+  Em empresas com Active Directory, o certificado pode ser distribuído para todas as máquinas por GPO.
+
+> Se o IP público da VPS mudar, gere o certificado de novo com o IP novo e reinstale nos computadores.
+> Se no futuro houver um domínio apontando para a VPS, dá para usar um certificado gratuito do Let's Encrypt
+> e o aviso deixa de existir sem instalar nada nos computadores.
 
 ## 7. Liberar a porta 8443 no firewall
 
@@ -189,9 +221,10 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 |---|---|
 | Topo do painel mostra "PABX desconectado" | `journalctl -u switchboard`; usuário/senha do AMI; `permit = 127.0.0.1` e `manager reload` |
 | Painel sem ramais ou sem nomes | Permissões `command` e `reporting` no usuário AMI; `HINT_CONTEXT=ext-local` |
-| Click-to-call não toca o ramal | `CHANNEL_TECH` (SIP × PJSIP); ramal registrado (`sip show peers` / `pjsip show contacts`) |
+| Click-to-call não toca o ramal | `CHANNEL_TECH=PJSIP`; ramal registrado (`asterisk -rx "pjsip show contacts"`) |
 | Aba Histórico: "Não foi possível consultar" | Usuário `'switchboard'@'127.0.0.1'` e senha do CDR. Se o MariaDB não escuta em TCP, use `CDR_DB_SOCKET=/var/lib/mysql/mysql.sock` e crie o usuário como `'switchboard'@'localhost'` |
 | Painel não atualiza em tempo real | Módulo `proxy_wstunnel` do Apache (`httpd -M \| grep wstunnel`) |
+| Navegador avisa "conexão não segura" | Esperado com certificado autoassinado; veja o passo 6 para instalar o certificado nos computadores |
 | `https://IP:8443` não abre | Regra da 8443 no firewall do Issabel / firewalld / painel da VPS; `systemctl status httpd` |
 | Erro 503 no navegador | `systemctl status switchboard` (serviço parado) |
 
@@ -204,7 +237,7 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | `SESSION_SECRET` | — | Segredo para assinar as sessões (obrigatório em produção) |
 | `AMI_HOST` / `AMI_PORT` | `127.0.0.1` / `5038` | Endereço do AMI |
 | `AMI_USER` / `AMI_SECRET` | — | Credenciais do AMI |
-| `CHANNEL_TECH` | `SIP` | `SIP` (chan_sip) ou `PJSIP` |
+| `CHANNEL_TECH` | `PJSIP` | `PJSIP` ou `SIP` (chan_sip) |
 | `DIAL_CONTEXT` | `from-internal` | Contexto usado para discar o destino |
 | `HINT_CONTEXT` | `ext-local` | Contexto dos hints dos ramais |
 | `ORIGINATE_TIMEOUT_MS` | `30000` | Tempo que o ramal do usuário fica tocando |

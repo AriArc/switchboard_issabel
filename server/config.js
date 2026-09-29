@@ -49,7 +49,7 @@ module.exports = {
       }
     : null,
 
-  channelTech: (env.CHANNEL_TECH || 'SIP').toUpperCase(),
+  channelTech: (env.CHANNEL_TECH || 'PJSIP').toUpperCase(),
   dialContext: env.DIAL_CONTEXT || 'from-internal',
   hintContext: env.HINT_CONTEXT || 'ext-local',
   originateTimeoutMs: Number(env.ORIGINATE_TIMEOUT_MS || 30000),
