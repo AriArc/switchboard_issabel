@@ -30,10 +30,28 @@ const { MysqlCdr, describeCdrError } = require('./cdr');
         `(${res.summary.in} recebidas, ${res.summary.out} realizadas, ${res.summary.missed} perdidas)`);
       for (const r of res.records) console.log(`  ${r.calldate}  ${r.direction === 'in' ? '←' : '→'} ${r.peer}  ${r.status}`);
       if (!res.summary.total) {
-        console.log(`  Nenhuma ligação encontrada. Confira se os canais do ramal no CDR são "PJSIP/${ext}-…":`);
+        console.log(`  Nenhuma ligação encontrada pelos canais "PJSIP/${ext}-…" / "SIP/${ext}-…".`);
+        if (!/^\d+$/.test(ext)) throw new Error('Informe o ramal só com números');
+        // Mostra como o ramal aparece de fato no CDR (fila, siga-me, nome de dispositivo diferente…)
+        const like = `%${ext}%`;
         const [rows] = await cdr.pool.query(
-          `SELECT calldate, src, dst, channel, dstchannel FROM \`${db.table}\` ORDER BY calldate DESC LIMIT 5`);
-        for (const r of rows) console.log(`  ${r.calldate}  ${r.src} → ${r.dst}  [${r.channel} → ${r.dstchannel}]`);
+          `SELECT calldate, clid, src, dst, channel, dstchannel, disposition, lastapp FROM \`${db.table}\`
+           WHERE calldate >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+             AND (src LIKE ? OR dst LIKE ? OR channel LIKE ? OR dstchannel LIKE ? OR clid LIKE ?)
+           ORDER BY calldate DESC LIMIT 10`, [like, like, like, like, like]);
+        if (rows.length) {
+          console.log(`  Registros dos últimos 30 dias que mencionam "${ext}" (envie esta saída para ajuste):`);
+          for (const r of rows) {
+            console.log(`  ${r.calldate}  src=${r.src} dst=${r.dst} clid=${r.clid}`);
+            console.log(`      channel=${r.channel}  dstchannel=${r.dstchannel}  ${r.disposition}  app=${r.lastapp}`);
+          }
+        } else {
+          console.log(`  Nenhum registro dos últimos 30 dias menciona "${ext}". O ramal fez/recebeu ligações já encerradas?`);
+          console.log('  (o Issabel grava o CDR só quando a ligação termina). Últimos registros do CDR:');
+          const [last] = await cdr.pool.query(
+            `SELECT calldate, src, dst, channel, dstchannel FROM \`${db.table}\` ORDER BY calldate DESC LIMIT 5`);
+          for (const r of last) console.log(`  ${r.calldate}  ${r.src} → ${r.dst}  [${r.channel} → ${r.dstchannel}]`);
+        }
       }
     }
     process.exitCode = 0;
