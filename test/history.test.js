@@ -99,6 +99,21 @@ test('siga-me e ligações em várias partes viram um registro por ligação', (
   assert.equal(by.L4.status, 'noanswer');
 });
 
+test('realizada gravada só com destino "s" (click-to-call) não quebra e acha o número', () => {
+  const rows = [
+    // click-to-call do switchboard: CallerID "Chamando <número>"
+    { linkedid: 'C1', calldate: '2026-10-07 11:00:00', clid: '"Chamando 1133334444" <7000>', src: '7000', dst: 's', channel: 'PJSIP/7000-00000070', dstchannel: 'PJSIP/IntekVox-00000071', lastdata: 'PJSIP/IntekVox/sip:1133334444@x', disposition: 'ANSWERED', duration: 40, billsec: 30 },
+    // originate para ramal interno, sem nome: usa o ramal do canal de destino
+    { linkedid: 'C2', calldate: '2026-10-07 11:05:00', clid: '"" <7000>', src: '7000', dst: 's', channel: 'PJSIP/7000-00000072', dstchannel: 'PJSIP/3601-00000073', lastdata: '', disposition: 'NO ANSWER', duration: 20, billsec: 0 },
+    // sem nenhuma pista do destino: registro sem número, mas não quebra
+    { linkedid: 'C3', calldate: '2026-10-07 11:10:00', clid: '"" <7000>', src: '7000', dst: 's', channel: 'PJSIP/7000-00000074', dstchannel: '', lastdata: '', disposition: 'NO ANSWER', duration: 5, billsec: 0 },
+  ];
+  const by = Object.fromEntries(shapeCalls(rows, '7000').map((r) => [r.id, r]));
+  assert.deepEqual([by.C1.direction, by.C1.peer, by.C1.status, by.C1.billsec], ['out', '1133334444', 'answered', 30]);
+  assert.deepEqual([by.C2.direction, by.C2.peer, by.C2.status], ['out', '3601', 'noanswer']);
+  assert.deepEqual([by.C3.direction, by.C3.peer], ['out', '']);
+});
+
 test('grupo de toque: atendida em outra linha não conta como perdida', () => {
   const rows = [
     { uniqueid: 'u1', calldate: '2026-09-29 10:00:00', clid: '"Cliente X" <11988887777>', src: '11988887777', dst: '600', channel: 'SIP/tronco-0001', dstchannel: 'PJSIP/1001-0002', disposition: 'NO ANSWER', duration: 20, billsec: 0 },

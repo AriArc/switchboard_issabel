@@ -42,6 +42,27 @@ function rowMatchers(ext) {
   return { dev, isOutDev, isIn, talked, onOwnPhone };
 }
 
+/**
+ * Destino de uma ligação realizada cujo CDR não traz o número (ex.: click-to-call/Originate,
+ * que o Issabel grava com dst = 's'). Tenta, nesta ordem: o nome "Chamando <número>" que o
+ * switchboard põe no CallerID, o ramal do canal de destino e o número no Dial (lastdata).
+ */
+function outPeerFallback(rows, ext) {
+  for (const r of rows) {
+    const m = /^Chamando\s+(\+?[0-9*#]{2,})$/i.exec(clidName(r.clid));
+    if (m && m[1] !== ext) return m[1];
+  }
+  for (const r of rows) {
+    const m = /^(?:SIP|PJSIP|IAX2)\/(\d{2,})-/i.exec(r.dstchannel || '');
+    if (m && m[1] !== ext) return m[1];
+  }
+  for (const r of rows) {
+    const m = /(?:^|[/@:&])(\+?\d{3,})(?=[@/,&]|$)/.exec(r.lastdata || '');
+    if (m && m[1] !== ext) return m[1];
+  }
+  return '';
+}
+
 function outStatus(rows, talked) {
   if (rows.some(talked)) return 'answered';
   const d = rows.map((r) => r.disposition);
@@ -78,7 +99,7 @@ function shapeCalls(rows, ext) {
     let status;
     let forwarded = false;
     if (direction === 'out') {
-      peer = String(realOut[0].dst);
+      peer = realOut.length ? String(realOut[0].dst) : outPeerFallback(outRows, ext);
       status = outStatus(outRows, m.talked);
     } else {
       const from = inRows.find((r) => dialable(r.src, ext)) || inRows[0];
@@ -200,7 +221,7 @@ class MysqlCdr {
       // Busca todas as linhas das ligações da página (com margem de datas para usar o índice de calldate)
       const ts = page.map((r) => String(r.t)).sort();
       const [rows] = await this.pool.query(
-        `SELECT ${key} AS k, calldate, clid, src, dst, channel, dstchannel, disposition, duration, billsec, uniqueid
+        `SELECT ${key} AS k, calldate, clid, src, dst, channel, dstchannel, lastdata, disposition, duration, billsec, uniqueid
          FROM \`${this.table}\`
          WHERE calldate BETWEEN ? - INTERVAL 1 DAY AND ? + INTERVAL 1 DAY AND ${key} IN (?)`,
         [ts[0], ts[ts.length - 1], page.map((r) => r.k)]
