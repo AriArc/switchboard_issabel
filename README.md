@@ -11,6 +11,9 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
   busca, totais e botão para ligar de volta. Cada usuário só vê as ligações do ramal cadastrado para ele
   (inclui ligações do tronco, filas e **siga-me**; as várias partes de uma ligação aparecem como um registro só)
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
+- **Sessão única por usuário**: enquanto o switchboard estiver aberto num navegador, outro login com o mesmo
+  usuário é recusado ("Usuário em uso"). Fechando a página, o usuário fica livre em até 45 segundos; o
+  administrador vê quem está online em *Usuários* e pode encerrar uma sessão
 - Transferência e desligamento de chamadas (operadores/administradores em qualquer chamada, usuários só nas próprias)
 - Cadastro de usuários com perfis: **Administrador**, **Operador (mesa)** e **Usuário**
 - Tema claro/escuro e layout responsivo
@@ -234,6 +237,7 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | Click-to-call não toca o ramal | `CHANNEL_TECH=PJSIP`; ramal registrado (`asterisk -rx "pjsip show contacts"`) |
 | Aba Histórico: "Não foi possível consultar" | A mensagem mostra a causa. Para diagnosticar pelo terminal: `cd /opt/switchboard_issabel && sudo -u switchboard npm run check-cdr -- <ramal>` (veja abaixo) |
 | Navegador mostra "Não seguro" | Esperado: o acesso é HTTP, sem certificado |
+| Login mostra "Usuário em uso" | O usuário está com o switchboard aberto em outro computador/navegador. Feche lá (ou clique em Sair), ou peça ao administrador para encerrar a sessão em *Usuários* |
 | Erro "Sua conexão não é particular" | O endereço foi digitado com `https://`; use `http://IP:8443` |
 | `http://IP:8443` não abre | `systemctl status switchboard`; regra da 8443 no firewall do Issabel / firewalld / painel da VPS |
 | Serviço não sobe com `EADDRINUSE` | Outro programa usa a 8443: `ss -ltnp \| grep 8443`. Se for o Apache (configuração HTTPS de uma versão antiga deste guia): `rm -f /etc/httpd/conf.d/switchboard.conf && systemctl reload httpd && systemctl restart switchboard` |

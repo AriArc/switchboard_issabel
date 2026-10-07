@@ -36,12 +36,21 @@ function parseCookies(header) {
   return out;
 }
 
-/** Resolve o usuário da requisição (HTTP ou upgrade do WebSocket) a partir do cookie. */
-function userFromRequest(req, { secret, users }) {
+/**
+ * Resolve a sessão da requisição (HTTP ou upgrade do WebSocket) a partir do cookie.
+ * Só vale a sessão atual do usuário (sessão única): logins anteriores ficam inválidos.
+ */
+function sessionFromRequest(req, { secret, users }) {
   const payload = verify(parseCookies(req.headers.cookie)[COOKIE], secret);
-  if (!payload) return null;
+  if (!payload || !payload.sid) return null;
   const user = users.get(payload.uid);
-  return user && user.active ? user : null;
+  if (!user || !user.active || user.sessionId !== payload.sid) return null;
+  return { user, sid: payload.sid };
+}
+
+function userFromRequest(req, opts) {
+  const s = sessionFromRequest(req, opts);
+  return s ? s.user : null;
 }
 
 function sessionCookie(token, { maxAgeSec, secure }) {
@@ -55,4 +64,4 @@ function sessionCookie(token, { maxAgeSec, secure }) {
   ].filter(Boolean).join('; ');
 }
 
-module.exports = { COOKIE, sign, verify, parseCookies, userFromRequest, sessionCookie };
+module.exports = { COOKIE, sign, verify, parseCookies, sessionFromRequest, userFromRequest, sessionCookie };

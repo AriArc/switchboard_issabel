@@ -98,7 +98,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .input:focus { border-color: var(--teal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lime) 45%, transparent); }
 .hint { font-size: 12px; color: var(--muted); }
-.error-text { color: #c0392b; font-size: 13px; min-height: 18px; }
+.error-text { color: #c0392b; font-size: 13px; min-height: 18px; margin-bottom: 12px; }
 
 /* ---------- Login ---------- */
 .login {
@@ -288,6 +288,7 @@ tr:last-child td { border-bottom: none; }
 .badge.operator { background: var(--lime-soft); color: var(--teal-strong); border-color: var(--lime); }
 .badge.ramal { background: var(--olive-soft); border-color: var(--olive); font-variant-numeric: tabular-nums; }
 .badge.inactive { color: var(--busy); }
+.badge.online { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); margin-left: 4px; }
 
 /* ---------- Histórico ---------- */
 .h-period { width: auto; height: 38px; }

@@ -8,7 +8,8 @@ const { AmiPbx } = require('./pbx');
 const { MockPbx } = require('./mock-pbx');
 const { createApp } = require('./app');
 const { MysqlCdr, MockCdr } = require('./cdr');
-const { userFromRequest } = require('./auth');
+const { sessionFromRequest } = require('./auth');
+const { Sessions } = require('./sessions');
 
 const users = new UserStore(config.dataFile);
 const admin = users.ensureAdmin(config.admin);
@@ -22,20 +23,23 @@ let cdr = null;
 if (config.mock) cdr = new MockCdr(pbx);
 else if (config.cdrDb) cdr = new MysqlCdr(config.cdrDb);
 else console.warn('[cdr] CDR_DB_HOST não definido — aba Histórico ficará indisponível');
-const app = createApp({ config, users, pbx, cdr });
+const sessions = new Sessions(users);
+const app = createApp({ config, users, pbx, cdr, sessions });
 const server = http.createServer(app);
 
 // Atualizações em tempo real do painel
 const wss = new WebSocketServer({ noServer: true });
 server.on('upgrade', (req, socket, head) => {
   if (new URL(req.url, 'http://x').pathname !== '/ws') return socket.destroy();
-  const user = userFromRequest(req, { secret: config.sessionSecret, users });
-  if (!user) {
+  const session = sessionFromRequest(req, { secret: config.sessionSecret, users });
+  if (!session) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     return socket.destroy();
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
-    ws.userId = user.id;
+    ws.userId = session.user.id;
+    ws.sid = session.sid;
+    sessions.attach(session.sid, ws);
     ws.send(JSON.stringify({ type: 'state', data: pbx.snapshot() }));
   });
 });
@@ -45,7 +49,7 @@ pbx.on('change', () => {
   for (const ws of wss.clients) {
     // Derruba sessões de usuários desativados/excluídos
     const u = users.get(ws.userId);
-    if (!u || !u.active) ws.close(4001, 'Sessão encerrada');
+    if (!u || !u.active || u.sessionId !== ws.sid) ws.close(4001, 'Sessão encerrada');
     else if (ws.readyState === ws.OPEN) ws.send(msg);
   }
 });

@@ -33,7 +33,7 @@
       credentials: 'same-origin',
     });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && url !== '/api/login') showLogin();
+    if (res.status === 401 && url !== '/api/login') showLogin(state.me ? 'Sua sessão expirou ou foi encerrada. Entre novamente.' : '');
     if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
     return data;
   }
@@ -62,9 +62,10 @@
   const now = () => Date.now() + state.clockOffset;
 
   // ---------- Sessão ----------
-  function showLogin() {
+  function showLogin(message = '') {
     if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
     state.me = null;
+    $('#login-error').textContent = message;
     $('#app-view').hidden = true;
     $('#login-view').hidden = false;
     $('#login-user').focus();
@@ -128,7 +129,9 @@
     ws.onclose = (ev) => {
       state.ws = null;
       setConn(false, 'Reconectando…');
-      if (ev.code === 4001) return showLogin();
+      // Sessão única: a sessão foi encerrada (logout, outro login ou administrador)
+      if (ev.code === 4001) return showLogin('Sua sessão foi encerrada. Entre novamente.');
+      if (ev.code === 4002) return showLogin('Sua sessão foi encerrada pelo administrador.');
       // Confere se a sessão ainda é válida antes de reconectar
       setTimeout(() => state.me && api('GET', '/api/me').then(() => connectWs()).catch(() => {}), 2000);
     };
@@ -348,8 +351,10 @@
       <td>${esc(u.username)}</td>
       <td>${u.extension ? `<span class="badge ramal">${esc(u.extension)}</span> <span class="hint">${esc(extName(u.extension) || '')}</span>` : '<span class="hint">—</span>'}</td>
       <td><span class="badge ${esc(u.role)}">${esc(ROLE_LABEL[u.role] || u.role)}</span></td>
-      <td>${u.active ? '<span class="badge">Ativo</span>' : '<span class="badge inactive">Inativo</span>'}</td>
+      <td>${u.active ? '<span class="badge">Ativo</span>' : '<span class="badge inactive">Inativo</span>'}
+        ${u.online ? '<span class="badge online" title="Com o switchboard aberto agora">● Online</span>' : ''}</td>
       <td style="text-align:right">
+        ${u.online && u.id !== state.me.id ? `<button class="btn btn-icon btn-ghost" type="button" data-kick-user="${esc(u.id)}" title="Encerrar sessão">${icon('logout')}</button>` : ''}
         <button class="btn btn-icon btn-ghost" type="button" data-edit-user="${esc(u.id)}" title="Editar">${icon('edit')}</button>
         ${u.id === state.me.id ? '' : `<button class="btn btn-icon btn-ghost" type="button" data-del-user="${esc(u.id)}" title="Excluir">${icon('trash')}</button>`}
       </td>
@@ -379,6 +384,19 @@
   $('#users-body').addEventListener('click', async (e) => {
     const edit = e.target.closest('[data-edit-user]');
     if (edit) return openUserModal(state.users.find((u) => u.id === edit.dataset.editUser));
+    const kick = e.target.closest('[data-kick-user]');
+    if (kick) {
+      const u = state.users.find((x) => x.id === kick.dataset.kickUser);
+      if (!confirm(`Encerrar a sessão de ${u.name}? O switchboard dele volta para a tela de login.`)) return;
+      try {
+        await api('POST', `/api/users/${encodeURIComponent(u.id)}/logout`);
+        toast('Sessão encerrada');
+        loadUsers();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+      return;
+    }
     const del = e.target.closest('[data-del-user]');
     if (del) {
       const u = state.users.find((x) => x.id === del.dataset.delUser);

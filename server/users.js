@@ -131,6 +131,13 @@ class UserStore {
     return publicUser(user);
   }
 
+  setSession(id, sessionId) {
+    const user = this.get(id);
+    if (!user) return;
+    user.sessionId = sessionId || null;
+    this.save();
+  }
+
   remove(id) {
     const idx = this.users.findIndex((u) => u.id === id);
     if (idx === -1) throw Object.assign(new Error('Usuário não encontrado'), { status: 404 });
@@ -153,7 +160,7 @@ class UserStore {
 }
 
 function publicUser(u) {
-  const { passwordHash, ...rest } = u;
+  const { passwordHash, sessionId, ...rest } = u;
   return rest;
 }
 

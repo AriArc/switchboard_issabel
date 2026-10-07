@@ -2,7 +2,8 @@
 
 const path = require('path');
 const express = require('express');
-const { sign, userFromRequest, sessionCookie, COOKIE } = require('./auth');
+const { sign, sessionFromRequest, sessionCookie, COOKIE } = require('./auth');
+const { Sessions } = require('./sessions');
 const { publicUser } = require('./users');
 const { describeCdrError } = require('./cdr');
 
@@ -17,7 +18,7 @@ function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
 
-function createApp({ config, users, pbx, cdr = null }) {
+function createApp({ config, users, pbx, cdr = null, sessions = new Sessions(users) }) {
   const app = express();
   app.disable('x-powered-by');
   // Atrás de um proxy local (Apache/nginx): usa o IP real do cliente e o protocolo HTTPS informado pelo proxy
@@ -34,8 +35,11 @@ function createApp({ config, users, pbx, cdr = null }) {
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   const auth = (req, res, next) => {
-    req.user = userFromRequest(req, { secret: config.sessionSecret, users });
-    if (!req.user) return next(httpError(401, 'Sessão expirada. Entre novamente.'));
+    const s = sessionFromRequest(req, { secret: config.sessionSecret, users });
+    if (!s) return next(httpError(401, 'Sessão expirada. Entre novamente.'));
+    req.user = s.user;
+    req.sid = s.sid;
+    sessions.touch(s.sid);
     next();
   };
   const requireRole = (...roles) => (req, res, next) =>
@@ -57,13 +61,22 @@ function createApp({ config, users, pbx, cdr = null }) {
       attempts.get(req.ip).push(Date.now());
       return next(httpError(401, 'Usuário ou senha inválidos'));
     }
+    // Sessão única: recusa se o usuário já estiver com o switchboard aberto em outro navegador
+    const here = sessionFromRequest(req, { secret: config.sessionSecret, users });
+    const sameBrowser = here && here.user.id === user.id ? here.sid : null;
+    if (sessions.isActive(user) && user.sessionId !== sameBrowser) {
+      return next(httpError(409, 'Usuário em uso: este usuário já está conectado ao switchboard em outro computador ou navegador.'));
+    }
+    const sid = sessions.start(user, sameBrowser);
     const maxAgeSec = config.sessionTtlHours * 3600;
-    const token = sign({ uid: user.id, exp: Date.now() + maxAgeSec * 1000 }, config.sessionSecret);
+    const token = sign({ uid: user.id, sid, exp: Date.now() + maxAgeSec * 1000 }, config.sessionSecret);
     res.set('Set-Cookie', sessionCookie(token, { maxAgeSec, secure: req.secure }));
     res.json({ user: publicUser(user) });
   });
 
   app.post('/api/logout', (req, res) => {
+    const s = sessionFromRequest(req, { secret: config.sessionSecret, users });
+    if (s) sessions.end(s.user);
     res.set('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
     res.json({ ok: true });
   });
@@ -145,7 +158,16 @@ function createApp({ config, users, pbx, cdr = null }) {
   });
 
   // Administração de usuários
-  app.get('/api/users', auth, requireRole('admin'), (req, res) => res.json({ users: users.list() }));
+  app.get('/api/users', auth, requireRole('admin'), (req, res) =>
+    res.json({ users: users.list().map((u) => ({ ...u, online: sessions.isActive(users.get(u.id)) })) }));
+  // Administrador encerra a sessão de um usuário (ex.: ficou aberta em outro computador)
+  app.post('/api/users/:id/logout', auth, requireRole('admin'), (req, res, next) => {
+    const user = users.get(req.params.id);
+    if (!user) return next(httpError(404, 'Usuário não encontrado'));
+    if (user.id === req.user.id) return next(httpError(400, 'Use o botão Sair para encerrar a sua própria sessão'));
+    sessions.end(user, { code: 4002, reason: 'Sessão encerrada pelo administrador' });
+    res.json({ ok: true });
+  });
   app.post('/api/users', auth, requireRole('admin'), (req, res, next) => {
     try {
       res.status(201).json({ user: users.create(req.body) });
