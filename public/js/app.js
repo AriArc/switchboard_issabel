@@ -9,7 +9,9 @@
   const STATUS_LABEL = {
     idle: 'Livre', inuse: 'Em ligação', busy: 'Ocupado', ringing: 'Tocando', onhold: 'Em espera', unavailable: 'Indisponível',
   };
-  const ROLE_LABEL = { admin: 'Administrador', operator: 'Operador', user: 'Usuário' };
+  const ROLE_LABEL = { admin: 'Administrador', supervisor: 'Supervisor', operator: 'Operador', user: 'Usuário' };
+  // Administrador e supervisor veem histórico e gravações de todos os ramais
+  const supervises = () => Boolean(state.me) && ['admin', 'supervisor'].includes(state.me.role);
 
   const state = {
     me: null,
@@ -83,9 +85,10 @@
       ? `Clique em um ramal para ligar a partir do seu ramal ${me.extension}`
       : 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
     $$('[data-admin]').forEach((el) => { el.hidden = me.role !== 'admin'; });
-    $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension && me.role !== 'admin'; });
-    $('#h-ext-select').hidden = me.role !== 'admin';
-    $('#h-ext').hidden = me.role === 'admin';
+    $$('[data-supervise]').forEach((el) => { el.hidden = !supervises(); });
+    $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension && !supervises(); });
+    $('#h-ext-select').hidden = !supervises();
+    $('#h-ext').hidden = supervises();
     hist.ext = me.extension || '';
     $('#h-ext').textContent = me.extension || '—';
     connectWs();
@@ -456,7 +459,7 @@
   const HIST_STATUS = { answered: 'Atendida', missed: 'Perdida', noanswer: 'Não atendida', busy: 'Ocupado', failed: 'Falhou' };
   const hist = { direction: 'all', days: '7', search: '', ext: '', records: [], offset: 0, loading: false, seq: 0 };
 
-  // Listas de ramais dos filtros do administrador (histórico e gravações)
+  // Listas de ramais dos filtros do administrador/supervisor (histórico e gravações)
   let extSelectKey = '';
   function fillExtensionSelects() {
     const exts = state.pbx.extensions;
@@ -476,7 +479,7 @@
     rs.innerHTML = `<option value="">Todos os ramais</option>${opts}`;
     rs.value = cur;
     // Administrador sem ramal abriu o histórico antes da lista de ramais chegar
-    if (state.view === 'historico' && state.me && state.me.role === 'admin' && !hist.records.length && !hist.loading) loadHistory();
+    if (state.view === 'historico' && supervises() && !hist.records.length && !hist.loading) loadHistory();
   }
 
   const fmtDate = (s) => {
@@ -497,7 +500,7 @@
     const qs = new URLSearchParams({
       days: hist.days, direction: hist.direction, search: hist.search, limit: HIST_PAGE, offset: hist.offset,
     });
-    if (state.me.role === 'admin') {
+    if (supervises()) {
       if (!hist.ext) { hist.loading = false; return renderHistory('Selecione um ramal.'); }
       qs.set('extension', hist.ext);
     }
@@ -564,7 +567,7 @@
   $('#h-more').addEventListener('click', () => !hist.loading && loadHistory(true));
   $('#h-ext-select').addEventListener('change', (e) => { hist.ext = e.target.value; loadHistory(); });
 
-  // ---------- Gravações (administrador) ----------
+  // ---------- Gravações (administrador e supervisor) ----------
   const REC_PAGE = 50;
   const rec = { days: '7', ext: '', search: '', records: [], offset: 0, loading: false, seq: 0 };
   const recUrl = (file, download) =>
@@ -650,8 +653,9 @@
   const VIEWS = { painel: 'Painel', historico: 'Histórico de ligações', gravacoes: 'Gravações', usuarios: 'Usuários' };
   function route() {
     let view = (location.hash || '#painel').slice(1);
-    if ((view === 'usuarios' || view === 'gravacoes') && state.me.role !== 'admin') view = 'painel';
-    if (view === 'historico' && !state.me.extension && state.me.role !== 'admin') view = 'painel';
+    if (view === 'usuarios' && state.me.role !== 'admin') view = 'painel';
+    if (view === 'gravacoes' && !supervises()) view = 'painel';
+    if (view === 'historico' && !state.me.extension && !supervises()) view = 'painel';
     if (!VIEWS[view]) view = 'painel';
     state.view = view;
     for (const v of Object.keys(VIEWS)) $(`#view-${v}`).hidden = v !== view;

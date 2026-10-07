@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const { sign, sessionFromRequest, sessionCookie, COOKIE } = require('./auth');
 const { Sessions } = require('./sessions');
-const { publicUser } = require('./users');
+const { publicUser, SUPERVISOR_ROLES } = require('./users');
 const { describeCdrError } = require('./cdr');
 
 const NUMBER_RE = /^\+?[0-9*#]{2,32}$/;
@@ -105,14 +105,15 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
   // Histórico de ligações: sempre do ramal cadastrado do usuário logado
   app.get('/api/history', auth, async (req, res, next) => {
     try {
-      // Administrador pode consultar qualquer ramal; os demais, só o ramal do próprio cadastro
+      // Administrador e supervisor consultam qualquer ramal; os demais, só o ramal do próprio cadastro
+      const supervises = SUPERVISOR_ROLES.includes(req.user.role);
       let extension = req.user.extension;
-      if (req.user.role === 'admin' && req.query.extension !== undefined) {
+      if (supervises && req.query.extension !== undefined) {
         if (!/^\d{2,8}$/.test(String(req.query.extension))) throw httpError(400, 'Ramal inválido');
         extension = String(req.query.extension);
       }
       if (!extension) {
-        throw httpError(400, req.user.role === 'admin' ? 'Selecione um ramal.' : 'Seu usuário não possui ramal cadastrado.');
+        throw httpError(400, supervises ? 'Selecione um ramal.' : 'Seu usuário não possui ramal cadastrado.');
       }
       if (!cdr) throw httpError(503, 'Histórico indisponível: banco de CDR não configurado (CDR_DB_HOST).');
       const result = await cdr.history(extension, req.query);
@@ -127,14 +128,14 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
     }
   });
 
-  // Gravações de todos os ramais (somente administrador)
+  // Gravações de todos os ramais (administrador e supervisor)
   const cdrError = (err, next) => {
     if (err.status) return next(err);
     const reason = describeCdrError(err, cdr && cdr.dbConfig);
     console.error('[gravações]', reason);
     next(httpError(502, `Não foi possível consultar as gravações: ${reason}.`));
   };
-  app.get('/api/recordings', auth, requireRole('admin'), async (req, res, next) => {
+  app.get('/api/recordings', auth, requireRole(...SUPERVISOR_ROLES), async (req, res, next) => {
     try {
       if (!recordings) throw httpError(503, 'Gravações indisponíveis: banco de CDR não configurado (CDR_DB_HOST).');
       res.json(await recordings.list(req.query));
@@ -142,7 +143,7 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
       cdrError(err, next);
     }
   });
-  app.get('/api/recordings/audio', auth, requireRole('admin'), async (req, res, next) => {
+  app.get('/api/recordings/audio', auth, requireRole(...SUPERVISOR_ROLES), async (req, res, next) => {
     try {
       if (!recordings) throw httpError(503, 'Gravações indisponíveis.');
       const file = String(req.query.file || '');
@@ -169,7 +170,7 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
 
   const findCall = (id) => pbx.calls().find((c) => c.id === id);
   const canManage = (user, call) =>
-    user.role === 'admin' || user.role === 'operator' || (user.extension && call.extensions.includes(user.extension));
+    user.role !== 'user' || (user.extension && call.extensions.includes(user.extension));
 
   app.post('/api/calls/:id/hangup', auth, async (req, res, next) => {
     try {

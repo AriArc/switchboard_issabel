@@ -4,7 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const ROLES = ['admin', 'operator', 'user'];
+const ROLES = ['admin', 'supervisor', 'operator', 'user'];
+// Perfis que veem histórico e gravações de todos os ramais
+const SUPERVISOR_ROLES = ['admin', 'supervisor'];
 const EXTENSION_RE = /^\d{2,8}$/;
 const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
 
@@ -164,4 +166,4 @@ function publicUser(u) {
   return rest;
 }
 
-module.exports = { UserStore, ROLES, hashPassword, verifyPassword, publicUser };
+module.exports = { UserStore, ROLES, SUPERVISOR_ROLES, hashPassword, verifyPassword, publicUser };

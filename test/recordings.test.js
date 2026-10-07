@@ -15,6 +15,7 @@ async function setup(t, { cdr, recordings }) {
   users.ensureAdmin({ username: 'admin', password: 'admin123' });
   users.create({ name: 'Ana', username: 'ana', password: 'secret1', extension: '7000', role: 'user' });
   users.create({ name: 'Op', username: 'oper', password: 'secret1', extension: '3601', role: 'operator' });
+  users.create({ name: 'Sup', username: 'super', password: 'secret1', extension: '3602', role: 'supervisor' });
   const pbx = { connected: true, snapshot: () => ({}), calls: () => [] };
   const server = createApp({ config: { sessionSecret: 'test', sessionTtlHours: 1 }, users, pbx, cdr, recordings }).listen(0);
   await once(server, 'listening');
@@ -114,4 +115,26 @@ test('item da gravação mostra quem ligou, destino e duração da conversa', ()
     { calldate: '2026-10-07 12:00:00', clid: '"Junior" <3602>', src: '3602', dst: '600', dstchannel: 'PJSIP/7000-00000011', billsec: 15 },
   ], os.tmpdir());
   assert.deepEqual([internal.fromName, internal.to, internal.answeredBy], ['Junior', '600', '7000']);
+});
+
+test('supervisor tem histórico e gravações de todos os ramais, mas não a gestão de usuários', async (t) => {
+  const seen = [];
+  const cdr = { history: async (ext) => { seen.push(ext); return { records: [], hasMore: false }; } };
+  const recordings = { list: async () => ({ records: [], hasMore: false, total: 0 }), audioPath: async () => null };
+  const { login, get } = await setup(t, { cdr, recordings });
+  const sup = await login('super', 'secret1');
+
+  assert.equal((await (await get('/api/history?extension=7000', sup)).json()).extension, '7000');
+  assert.equal((await (await get('/api/history', sup)).json()).extension, '3602'); // sem escolher: o próprio ramal
+  assert.equal((await get('/api/recordings', sup)).status, 200);
+  assert.equal((await get('/api/recordings/audio?file=x.wav', sup)).status, 404);
+
+  assert.equal((await get('/api/users', sup)).status, 403);
+  const base = (await get('/api/me', sup)).url.replace('/api/me', '');
+  const create = await fetch(`${base}/api/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: sup },
+    body: JSON.stringify({ name: 'X', username: 'xxx', password: 'secret1', extension: '3700', role: 'admin' }),
+  });
+  assert.equal(create.status, 403);
+  assert.deepEqual(seen, ['7000', '3602']);
 });

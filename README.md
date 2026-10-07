@@ -10,14 +10,23 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 - **Histórico de ligações** do próprio ramal (aba *Histórico*): recebidas, realizadas e perdidas, com período,
   busca, totais e botão para ligar de volta. Cada usuário só vê as ligações do ramal cadastrado para ele
   (inclui ligações do tronco, filas e **siga-me**; as várias partes de uma ligação aparecem como um registro só)
-- **Gravações** (somente administrador): aba com as gravações de todos os ramais, com player, download,
-  filtro por ramal, período e busca. O administrador também consulta o **histórico de qualquer ramal**
+- **Gravações** (supervisor e administrador): aba com as gravações de todos os ramais, com player, download,
+  filtro por ramal, período e busca. Esses perfis também consultam o **histórico de qualquer ramal**
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
 - **Sessão única por usuário**: enquanto o switchboard estiver aberto num navegador, outro login com o mesmo
   usuário é recusado ("Usuário em uso"). Fechando a página, o usuário fica livre em até 45 segundos; o
   administrador vê quem está online em *Usuários* e pode encerrar uma sessão
 - Transferência e desligamento de chamadas (operadores/administradores em qualquer chamada, usuários só nas próprias)
-- Cadastro de usuários com perfis: **Administrador**, **Operador (mesa)** e **Usuário**
+- Cadastro de usuários com quatro perfis:
+
+  | Perfil | Painel e click-to-call | Desligar/transferir | Histórico | Gravações | Usuários |
+  |---|---|---|---|---|---|
+  | **Usuário** | ✓ | só as próprias chamadas | só o próprio ramal | — | — |
+  | **Operador (mesa)** | ✓ | qualquer chamada | só o próprio ramal | — | — |
+  | **Supervisor** | ✓ | qualquer chamada | qualquer ramal | ✓ | — |
+  | **Administrador** | ✓ | qualquer chamada | qualquer ramal | ✓ | ✓ |
+
+  O **Administrador** é reservado aos mantenedores do Issabel; para a gestão do dia a dia do cliente, use **Supervisor**.
 - Tema claro/escuro e layout responsivo
 
 ## Como o click-to-call funciona
