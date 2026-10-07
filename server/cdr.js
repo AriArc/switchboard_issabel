@@ -18,38 +18,91 @@ function clidName(clid) {
   return m ? m[1].trim() : '';
 }
 
-function channelOf(channel, ext) {
-  return new RegExp(`^(?:SIP|PJSIP|IAX2)/${ext}-`, 'i').test(channel || '');
+// Um número "discável" (descarta 's', 'h' e outros nomes internos do Asterisk)
+function dialable(value, ext) {
+  return /^\+?[0-9*#]{2,}$/.test(String(value || '')) && String(value) !== ext;
 }
 
-function statusOf(direction, disposition) {
-  if (disposition === 'ANSWERED') return 'answered';
-  if (direction === 'in') return 'missed';
-  if (disposition === 'BUSY') return 'busy';
-  if (disposition === 'FAILED' || disposition === 'CONGESTION') return 'failed';
+/**
+ * Regras para reconhecer as linhas do CDR de um ramal. As mesmas regras são usadas no SQL
+ * (filtro, paginação e totais) e em shapeCalls (montagem dos registros exibidos).
+ *
+ * - Realizada: o canal de origem é o aparelho do ramal (PJSIP/<ramal>-…).
+ * - Recebida: o destino é o aparelho, o ramal via siga-me/fila (Local/FMPR-<ramal>@…, Local/<ramal>@…)
+ *   ou o número discado foi o próprio ramal (dst = <ramal>), o que cobre siga-me para celular.
+ * - Atendida: só conta se houve conversa (billsec > 0); o siga-me marca ANSWERED com 0 s.
+ */
+function rowMatchers(ext) {
+  const dev = new RegExp(`^(?:SIP|PJSIP|IAX2)/${ext}-`, 'i');
+  const self = new RegExp(`^Local/(?:FMPR-)?${ext}@`, 'i');
+  const isOutDev = (r) => dev.test(r.channel || '');
+  const isIn = (r) => !isOutDev(r) && (dev.test(r.dstchannel || '') || self.test(r.dstchannel || '') || String(r.dst) === ext);
+  const talked = (r) => r.disposition === 'ANSWERED' && Number(r.billsec) > 0;
+  const onOwnPhone = (r) => dev.test(r.dstchannel || '') || self.test(r.dstchannel || '');
+  return { dev, isOutDev, isIn, talked, onOwnPhone };
+}
+
+function outStatus(rows, talked) {
+  if (rows.some(talked)) return 'answered';
+  const d = rows.map((r) => r.disposition);
+  if (d.includes('BUSY')) return 'busy';
+  if (d.includes('FAILED') || d.includes('CONGESTION')) return 'failed';
   return 'noanswer';
 }
 
-/** Converte linhas do CDR em registros do ponto de vista do ramal. */
-function shapeRecords(rows, ext) {
-  const byCall = new Map();
+/**
+ * Junta as linhas de uma mesma ligação (mesmo linkedid/uniqueid, coluna `k`) em um registro
+ * do ponto de vista do ramal. Mantém a ordem de chegada das chaves.
+ */
+function shapeCalls(rows, ext) {
+  const m = rowMatchers(ext);
+  const groups = new Map();
   for (const r of rows) {
-    const direction = channelOf(r.channel, ext) ? 'out' : 'in';
-    const record = {
-      id: `${r.uniqueid}:${direction}`,
-      calldate: String(r.calldate),
-      direction,
-      peer: direction === 'out' ? String(r.dst || '') : String(r.src || ''),
-      peerName: direction === 'in' ? clidName(r.clid) : '',
-      status: statusOf(direction, r.disposition),
-      duration: Number(r.duration) || 0,
-      billsec: Number(r.billsec) || 0,
-    };
-    // Grupos de toque/filas podem gerar várias linhas por chamada: fica a atendida
-    const prev = byCall.get(record.id);
-    if (!prev || (prev.status !== 'answered' && record.status === 'answered')) byCall.set(record.id, record);
+    const key = r.k || r.linkedid || r.uniqueid;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
   }
-  return [...byCall.values()];
+
+  const records = [];
+  for (const [key, list] of groups) {
+    list.sort((a, b) => String(a.calldate).localeCompare(String(b.calldate)));
+    const outRows = list.filter(m.isOutDev);
+    const inRows = list.filter(m.isIn);
+    const realOut = outRows.filter((r) => dialable(r.dst, ext));
+    const direction = realOut.length ? 'out' : inRows.length ? 'in' : 'out';
+    const rel = direction === 'out' ? outRows : inRows;
+    if (!rel.length) continue;
+
+    let peer = '';
+    let peerName = '';
+    let status;
+    let forwarded = false;
+    if (direction === 'out') {
+      peer = String(realOut[0].dst);
+      status = outStatus(outRows, m.talked);
+    } else {
+      const from = inRows.find((r) => dialable(r.src, ext)) || inRows[0];
+      peer = String(from.src || '');
+      const name = clidName(from.clid);
+      peerName = name && name !== peer ? name : '';
+      const answered = inRows.filter(m.talked);
+      status = answered.length ? 'answered' : 'missed';
+      // Atendida, mas não no aparelho do ramal: siga-me para celular ou desvio
+      forwarded = answered.length > 0 && !answered.some(m.onOwnPhone);
+    }
+    records.push({
+      id: String(key),
+      calldate: String(list[0].calldate),
+      direction,
+      peer,
+      peerName,
+      status,
+      forwarded,
+      duration: Math.max(...rel.map((r) => Number(r.duration) || 0)),
+      billsec: Math.max(0, ...rel.filter(m.talked).map((r) => Number(r.billsec) || 0)),
+    });
+  }
+  return records;
 }
 
 function summaryOf(inCount, outCount, missed) {
@@ -84,65 +137,91 @@ class MysqlCdr {
     this.dbConfig = { ...dbConfig, password: undefined };
   }
 
-  async history(extension, query) {
-    const { days, direction, search, limit, offset } = normalizeQuery(query);
-    const pats = [`SIP/${extension}-%`, `PJSIP/${extension}-%`];
-    const isOut = '(channel LIKE ? OR channel LIKE ?)';
-    const isIn = '(dstchannel LIKE ? OR dstchannel LIKE ?)';
-
-    const where = ['calldate >= DATE_SUB(CURDATE(), INTERVAL ? DAY)'];
-    const params = [days];
-    if (direction === 'out') {
-      where.push(isOut);
-      params.push(...pats);
-    } else if (direction === 'in' || direction === 'missed') {
-      where.push(isIn, `NOT ${isOut}`);
-      params.push(...pats, ...pats);
-      if (direction === 'missed') {
-        // Descarta chamadas que o ramal atendeu em outra linha (grupos de toque/filas geram várias)
-        where.push(`disposition <> 'ANSWERED' AND NOT EXISTS (
-          SELECT 1 FROM \`${this.table}\` a
-          WHERE a.uniqueid = c.uniqueid AND a.disposition = 'ANSWERED'
-            AND a.calldate BETWEEN c.calldate - INTERVAL 1 HOUR AND c.calldate + INTERVAL 1 HOUR
-            AND (a.dstchannel LIKE ? OR a.dstchannel LIKE ?))`);
-        params.push(...pats);
-      }
-    } else {
-      where.push(`(${isOut} OR ${isIn})`);
-      params.push(...pats, ...pats);
+  // Agrupa por linkedid quando a tabela tem essa coluna (Issabel 5 / FreePBX); senão, por uniqueid
+  async _keyExpr() {
+    if (!this.keyExpr) {
+      const [cols] = await this.pool.query(`SHOW COLUMNS FROM \`${this.table}\` LIKE 'linkedid'`);
+      this.keyExpr = cols.length ? "COALESCE(NULLIF(linkedid, ''), uniqueid)" : 'uniqueid';
     }
-    if (search) {
-      const like = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-      where.push('(src LIKE ? OR dst LIKE ? OR clid LIKE ?)');
-      params.push(like, like, like);
-    }
-
-    const sql = `SELECT calldate, clid, src, dst, channel, dstchannel, disposition, duration, billsec, uniqueid
-      FROM \`${this.table}\` c WHERE ${where.join(' AND ')}
-      ORDER BY calldate DESC LIMIT ? OFFSET ?`;
-    const [rows] = await this.pool.query(sql, [...params, limit + 1, offset]);
-    const hasMore = rows.length > limit;
-    const result = { records: shapeRecords(rows.slice(0, limit), extension), hasMore };
-    if (offset === 0) result.summary = await this._summary(pats, days);
-    return result;
+    return this.keyExpr;
   }
 
-  // Totais do período (independentes do filtro de tipo e da paginação)
-  async _summary(pats, days) {
-    const sql = `SELECT
-        COALESCE(SUM(dir = 'out'), 0) AS outCount,
-        COALESCE(SUM(dir = 'in'), 0) AS inCount,
-        COALESCE(SUM(dir = 'in' AND ans = 0), 0) AS missedCount
-      FROM (
-        SELECT uniqueid, IF(channel LIKE ? OR channel LIKE ?, 'out', 'in') AS dir,
-               MAX(disposition = 'ANSWERED') AS ans
+  /**
+   * Subconsulta com uma linha por ligação do ramal no período e as marcações usadas para filtrar:
+   * o = realizada para um número válido, i = recebida, ia = recebida e atendida, s = casa com a busca.
+   */
+  _groupedSql(key, ext, days, search) {
+    const dev = [`SIP/${ext}-%`, `PJSIP/${ext}-%`];
+    const self = [`Local/FMPR-${ext}@%`, `Local/${ext}@%`];
+    const od = '(channel LIKE ? OR channel LIKE ?)';
+    const im = `(NOT ${od} AND (dstchannel LIKE ? OR dstchannel LIKE ? OR dstchannel LIKE ? OR dstchannel LIKE ? OR dst = ?))`;
+    const like = search ? `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+    const sql = `SELECT k, MIN(calldate) AS t, MAX(o) AS o, MAX(i) AS i, MAX(i AND tk) AS ia, MAX(sm) AS s FROM (
+        SELECT ${key} AS k, calldate,
+          (${od} AND dst REGEXP '^[+]?[0-9*#]{2,}$' AND dst <> ?) AS o,
+          ${im} AS i,
+          (disposition = 'ANSWERED' AND billsec > 0) AS tk,
+          ${like ? '(src LIKE ? OR dst LIKE ? OR clid LIKE ?)' : '1'} AS sm
         FROM \`${this.table}\`
         WHERE calldate >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-          AND (channel LIKE ? OR channel LIKE ? OR dstchannel LIKE ? OR dstchannel LIKE ?)
-        GROUP BY uniqueid, dir
-      ) t`;
-    const [[row]] = await this.pool.query(sql, [...pats, days, ...pats, ...pats]);
-    return summaryOf(Number(row.inCount), Number(row.outCount), Number(row.missedCount));
+          AND (channel LIKE ? OR channel LIKE ? OR dstchannel LIKE ? OR dstchannel LIKE ?
+               OR dstchannel LIKE ? OR dstchannel LIKE ? OR dst = ?)
+      ) r GROUP BY k`;
+    const params = [
+      ...dev, ext,
+      ...dev, ...dev, ...self, ext,
+      ...(like ? [like, like, like] : []),
+      days,
+      ...dev, ...dev, ...self, ext,
+    ];
+    return { sql, params };
+  }
+
+  async history(extension, query) {
+    const { days, direction, search, limit, offset } = normalizeQuery(query);
+    const key = await this._keyExpr();
+    const g = this._groupedSql(key, extension, days, search);
+
+    const filters = {
+      all: '1',
+      out: '(o = 1 OR i = 0)',
+      in: '(o = 0 AND i = 1)',
+      missed: '(o = 0 AND i = 1 AND ia = 0)',
+    };
+    const [keys] = await this.pool.query(
+      `SELECT k, t FROM (${g.sql}) g WHERE s = 1 AND ${filters[direction]} ORDER BY t DESC LIMIT ? OFFSET ?`,
+      [...g.params, limit + 1, offset]
+    );
+    const hasMore = keys.length > limit;
+    const page = keys.slice(0, limit);
+
+    let records = [];
+    if (page.length) {
+      // Busca todas as linhas das ligações da página (com margem de datas para usar o índice de calldate)
+      const ts = page.map((r) => String(r.t)).sort();
+      const [rows] = await this.pool.query(
+        `SELECT ${key} AS k, calldate, clid, src, dst, channel, dstchannel, disposition, duration, billsec, uniqueid
+         FROM \`${this.table}\`
+         WHERE calldate BETWEEN ? - INTERVAL 1 DAY AND ? + INTERVAL 1 DAY AND ${key} IN (?)`,
+        [ts[0], ts[ts.length - 1], page.map((r) => r.k)]
+      );
+      const byKey = new Map(shapeCalls(rows, extension).map((r) => [r.id, r]));
+      records = page.map((r) => byKey.get(String(r.k))).filter(Boolean);
+    }
+
+    const result = { records, hasMore };
+    if (offset === 0) {
+      const t = this._groupedSql(key, extension, days, '');
+      const [[row]] = await this.pool.query(
+        `SELECT COALESCE(SUM(o = 1 OR i = 0), 0) AS outCount,
+                COALESCE(SUM(o = 0 AND i = 1), 0) AS inCount,
+                COALESCE(SUM(o = 0 AND i = 1 AND ia = 0), 0) AS missedCount
+         FROM (${t.sql}) g`,
+        t.params
+      );
+      result.summary = summaryOf(Number(row.inCount), Number(row.outCount), Number(row.missedCount));
+    }
+    return result;
   }
 }
 
@@ -243,4 +322,4 @@ function describeCdrError(err, db = {}) {
   }
 }
 
-module.exports = { MysqlCdr, describeCdrError, MockCdr, shapeRecords, normalizeQuery, clidName };
+module.exports = { MysqlCdr, describeCdrError, MockCdr, shapeCalls, normalizeQuery, clidName };

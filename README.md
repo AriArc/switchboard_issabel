@@ -9,6 +9,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
   o navegador não consegue escolher outro ramal de origem
 - **Histórico de ligações** do próprio ramal (aba *Histórico*): recebidas, realizadas e perdidas, com período,
   busca, totais e botão para ligar de volta. Cada usuário só vê as ligações do ramal cadastrado para ele
+  (inclui ligações do tronco, filas e **siga-me**; as várias partes de uma ligação aparecem como um registro só)
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
 - Transferência e desligamento de chamadas (operadores/administradores em qualquer chamada, usuários só nas próprias)
 - Cadastro de usuários com perfis: **Administrador**, **Operador (mesa)** e **Usuário**

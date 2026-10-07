@@ -493,7 +493,7 @@
         <td><div class="contact"><b class="num">${esc(name || r.peer || 'Desconhecido')}</b>${name ? `<span>${esc(r.peer)}</span>` : `<span>${esc(DIR_LABEL[r.direction])}</span>`}</div></td>
         <td class="num">${fmtDate(r.calldate)}</td>
         <td class="num">${r.status === 'answered' ? fmtDuration(r.billsec * 1000) : '—'}</td>
-        <td><span class="badge st-${esc(r.status)}">${esc(HIST_STATUS[r.status] || r.status)}</span></td>
+        <td><span class="badge st-${esc(r.status)}"${r.forwarded ? ' title="Atendida pelo siga-me (celular ou desvio), não no aparelho do ramal"' : ''}>${esc(HIST_STATUS[r.status] || r.status)}${r.forwarded ? ' · siga-me' : ''}</span></td>
         <td style="text-align:right">${canCall ? `<button class="call-btn" type="button" data-call="${esc(r.peer)}" title="Ligar para ${esc(r.peer)}" aria-label="Ligar para ${esc(r.peer)}">${icon('phone')}</button>` : ''}</td>
       </tr>`;
     }).join('');
