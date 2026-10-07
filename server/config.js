@@ -49,6 +49,9 @@ module.exports = {
       }
     : null,
 
+  // Onde o Issabel guarda as gravações (subpastas AAAA/MM/DD)
+  recordingsDir: env.RECORDINGS_DIR || '/var/spool/asterisk/monitor',
+
   channelTech: (env.CHANNEL_TECH || 'PJSIP').toUpperCase(),
   dialContext: env.DIAL_CONTEXT || 'from-internal',
   hintContext: env.HINT_CONTEXT || 'ext-local',

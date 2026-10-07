@@ -83,7 +83,10 @@
       ? `Clique em um ramal para ligar a partir do seu ramal ${me.extension}`
       : 'Seu usuário não possui ramal discador. Peça ao administrador para associar um ramal.';
     $$('[data-admin]').forEach((el) => { el.hidden = me.role !== 'admin'; });
-    $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension; });
+    $$('[data-has-ext]').forEach((el) => { el.hidden = !me.extension && me.role !== 'admin'; });
+    $('#h-ext-select').hidden = me.role !== 'admin';
+    $('#h-ext').hidden = me.role === 'admin';
+    hist.ext = me.extension || '';
     $('#h-ext').textContent = me.extension || '—';
     connectWs();
     route();
@@ -156,6 +159,7 @@
 
     renderExtensions();
     renderCalls();
+    fillExtensionSelects();
     $('#ext-options').innerHTML = extensions
       .map((e) => `<option value="${esc(e.exten)}">${esc(e.name || '')}</option>`)
       .join('');
@@ -450,7 +454,30 @@
   const HIST_PAGE = 50;
   const DIR_LABEL = { in: 'Recebida', out: 'Realizada' };
   const HIST_STATUS = { answered: 'Atendida', missed: 'Perdida', noanswer: 'Não atendida', busy: 'Ocupado', failed: 'Falhou' };
-  const hist = { direction: 'all', days: '7', search: '', records: [], offset: 0, loading: false, seq: 0 };
+  const hist = { direction: 'all', days: '7', search: '', ext: '', records: [], offset: 0, loading: false, seq: 0 };
+
+  // Listas de ramais dos filtros do administrador (histórico e gravações)
+  let extSelectKey = '';
+  function fillExtensionSelects() {
+    const exts = state.pbx.extensions;
+    const key = exts.map((e) => `${e.exten}:${e.name}`).join('|');
+    if (key === extSelectKey) return;
+    extSelectKey = key;
+    const opts = exts.map((e) => {
+      const name = e.name && e.name !== e.exten ? ` — ${e.name}` : '';
+      return `<option value="${esc(e.exten)}">Ramal ${esc(e.exten)}${esc(name)}</option>`;
+    }).join('');
+    const hs = $('#h-ext-select');
+    hs.innerHTML = opts;
+    if (!hist.ext && exts.length) hist.ext = exts[0].exten;
+    hs.value = hist.ext;
+    const rs = $('#r-ext');
+    const cur = rs.value;
+    rs.innerHTML = `<option value="">Todos os ramais</option>${opts}`;
+    rs.value = cur;
+    // Administrador sem ramal abriu o histórico antes da lista de ramais chegar
+    if (state.view === 'historico' && state.me && state.me.role === 'admin' && !hist.records.length && !hist.loading) loadHistory();
+  }
 
   const fmtDate = (s) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
@@ -470,6 +497,10 @@
     const qs = new URLSearchParams({
       days: hist.days, direction: hist.direction, search: hist.search, limit: HIST_PAGE, offset: hist.offset,
     });
+    if (state.me.role === 'admin') {
+      if (!hist.ext) { hist.loading = false; return renderHistory('Selecione um ramal.'); }
+      qs.set('extension', hist.ext);
+    }
     try {
       const res = await api('GET', `/api/history?${qs}`);
       if (seq !== hist.seq) return; // resposta de uma consulta antiga
@@ -505,7 +536,7 @@
     $('#h-body').innerHTML = hist.records.map((r) => {
       const kind = r.status === 'missed' ? 'missed' : r.direction;
       const name = r.peerName || extName(r.peer) || '';
-      const canCall = r.peer && /^\+?[0-9*#]{2,32}$/.test(r.peer) && r.peer !== state.me.extension;
+      const canCall = state.me.extension && r.peer && /^\+?[0-9*#]{2,32}$/.test(r.peer) && r.peer !== state.me.extension;
       return `<tr>
         <td><div class="dir ${kind}" title="${esc(DIR_LABEL[r.direction])}">${icon(kind)}</div></td>
         <td><div class="contact"><b class="num">${esc(name || r.peer || 'Desconhecido')}</b>${name ? `<span>${esc(r.peer)}</span>` : `<span>${esc(DIR_LABEL[r.direction])}</span>`}</div></td>
@@ -531,13 +562,96 @@
     histSearchTimer = setTimeout(() => { hist.search = e.target.value.trim(); loadHistory(); }, 350);
   });
   $('#h-more').addEventListener('click', () => !hist.loading && loadHistory(true));
+  $('#h-ext-select').addEventListener('change', (e) => { hist.ext = e.target.value; loadHistory(); });
+
+  // ---------- Gravações (administrador) ----------
+  const REC_PAGE = 50;
+  const rec = { days: '7', ext: '', search: '', records: [], offset: 0, loading: false, seq: 0 };
+  const recUrl = (file, download) =>
+    `/api/recordings/audio?file=${encodeURIComponent(file)}${download ? '&download=1' : ''}`;
+
+  async function loadRecordings(append = false) {
+    const seq = ++rec.seq;
+    if (!append) { rec.offset = 0; rec.records = []; }
+    rec.loading = true;
+    $('#r-more').disabled = true;
+    if (!append) renderRecordings('Carregando…');
+    const qs = new URLSearchParams({ days: rec.days, extension: rec.ext, search: rec.search, limit: REC_PAGE, offset: rec.offset });
+    try {
+      const res = await api('GET', `/api/recordings?${qs}`);
+      if (seq !== rec.seq) return;
+      rec.records = rec.records.concat(res.records);
+      rec.offset += REC_PAGE;
+      $('#r-more').hidden = !res.hasMore;
+      if (res.total !== undefined) $('#r-total').textContent = res.total;
+      renderRecordings();
+    } catch (err) {
+      if (seq !== rec.seq) return;
+      $('#r-more').hidden = true;
+      $('#r-total').textContent = '0';
+      renderRecordings(err.message);
+    } finally {
+      if (seq === rec.seq) { rec.loading = false; $('#r-more').disabled = false; }
+    }
+  }
+
+  function renderRecordings(message) {
+    const extName = (x) => {
+      const e = state.pbx.extensions.find((i) => i.exten === x);
+      return e && e.name && e.name !== e.exten ? e.name : '';
+    };
+    const party = (num, name) => {
+      const n = name || extName(num);
+      return `<div class="contact"><b class="num">${esc(n || num || 'Desconhecido')}</b>${n ? `<span>${esc(num)}</span>` : ''}</div>`;
+    };
+    const empty = $('#r-empty');
+    if (message || !rec.records.length) {
+      $('#r-body').innerHTML = '';
+      empty.hidden = false;
+      empty.innerHTML = `${icon('mic')}<div>${esc(message || 'Nenhuma gravação encontrada no período')}</div>`;
+      return;
+    }
+    empty.hidden = true;
+    $('#r-body').innerHTML = rec.records.map((r) => `<tr>
+      <td class="num">${fmtDate(r.calldate)}</td>
+      <td>${party(r.from, r.fromName)}</td>
+      <td>${party(r.to)}${r.answeredBy ? `<div class="hint">atendida no ramal ${esc(r.answeredBy)}</div>` : ''}</td>
+      <td class="num">${fmtDuration(r.billsec * 1000)}</td>
+      <td>${r.available
+        ? (r.type === 'audio/x-gsm'
+          ? '<span class="hint">Formato GSM: baixe para ouvir</span>'
+          : `<audio class="rec-audio" controls preload="none" src="${esc(recUrl(r.file))}"></audio>`)
+        : '<span class="hint">Arquivo não encontrado</span>'}</td>
+      <td style="text-align:right">${r.available
+        ? `<a class="btn btn-icon btn-ghost" href="${esc(recUrl(r.file, true))}" title="Baixar gravação" aria-label="Baixar gravação">${icon('download')}</a>`
+        : ''}</td>
+    </tr>`).join('');
+  }
+
+  // Toca uma gravação por vez
+  document.addEventListener('play', (e) => {
+    $$('audio.rec-audio').forEach((a) => { if (a !== e.target) a.pause(); });
+  }, true);
+  // Erro ao carregar o áudio (ex.: sem permissão no servidor)
+  document.addEventListener('error', (e) => {
+    if (e.target.matches && e.target.matches('audio.rec-audio')) toast('Não foi possível reproduzir a gravação. Verifique as permissões no servidor (veja o README).', 'err');
+  }, true);
+
+  $('#r-ext').addEventListener('change', (e) => { rec.ext = e.target.value; loadRecordings(); });
+  $('#r-days').addEventListener('change', (e) => { rec.days = e.target.value; loadRecordings(); });
+  let recSearchTimer;
+  $('#r-search').addEventListener('input', (e) => {
+    clearTimeout(recSearchTimer);
+    recSearchTimer = setTimeout(() => { rec.search = e.target.value.trim(); loadRecordings(); }, 350);
+  });
+  $('#r-more').addEventListener('click', () => !rec.loading && loadRecordings(true));
 
   // ---------- Navegação ----------
-  const VIEWS = { painel: 'Painel', historico: 'Histórico de ligações', usuarios: 'Usuários' };
+  const VIEWS = { painel: 'Painel', historico: 'Histórico de ligações', gravacoes: 'Gravações', usuarios: 'Usuários' };
   function route() {
     let view = (location.hash || '#painel').slice(1);
-    if (view === 'usuarios' && state.me.role !== 'admin') view = 'painel';
-    if (view === 'historico' && !state.me.extension) view = 'painel';
+    if ((view === 'usuarios' || view === 'gravacoes') && state.me.role !== 'admin') view = 'painel';
+    if (view === 'historico' && !state.me.extension && state.me.role !== 'admin') view = 'painel';
     if (!VIEWS[view]) view = 'painel';
     state.view = view;
     for (const v of Object.keys(VIEWS)) $(`#view-${v}`).hidden = v !== view;
@@ -546,6 +660,7 @@
     $('.shell').classList.remove('nav-open');
     if (view === 'usuarios') loadUsers();
     if (view === 'historico') loadHistory();
+    if (view === 'gravacoes') loadRecordings();
   }
   window.addEventListener('hashchange', () => state.me && route());
   $('#menu-btn').addEventListener('click', () => $('.shell').classList.toggle('nav-open'));

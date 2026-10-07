@@ -10,6 +10,8 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 - **Histórico de ligações** do próprio ramal (aba *Histórico*): recebidas, realizadas e perdidas, com período,
   busca, totais e botão para ligar de volta. Cada usuário só vê as ligações do ramal cadastrado para ele
   (inclui ligações do tronco, filas e **siga-me**; as várias partes de uma ligação aparecem como um registro só)
+- **Gravações** (somente administrador): aba com as gravações de todos os ramais, com player, download,
+  filtro por ramal, período e busca. O administrador também consulta o **histórico de qualquer ramal**
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
 - **Sessão única por usuário**: enquanto o switchboard estiver aberto num navegador, outro login com o mesmo
   usuário é recusado ("Usuário em uso"). Fechando a página, o usuário fica livre em até 45 segundos; o
@@ -122,6 +124,17 @@ mysql -h 127.0.0.1 -u switchboard -p asteriskcdrdb -e "SELECT COUNT(*) FROM cdr"
 
 Sem `CDR_DB_HOST` configurado, o restante do sistema funciona normalmente e a aba Histórico mostra um aviso.
 
+### Acesso às gravações (aba Gravações)
+
+As gravações ficam em `/var/spool/asterisk/monitor`, que pertence ao Asterisk. Dê leitura ao switchboard
+colocando o usuário dele no grupo `asterisk`:
+
+```bash
+usermod -aG asterisk switchboard
+```
+
+(O teste do passo 5 confirma se as gravações estão acessíveis.)
+
 ## 4. Configurar o `.env`
 
 Edite `/opt/switchboard_issabel/.env`:
@@ -165,7 +178,7 @@ Confira o acesso ao histórico (troque `3601` por um ramal existente):
 
 ```bash
 cd /opt/switchboard_issabel
-sudo -u switchboard npm run check-cdr -- 3601   # deve responder "✓ Conexão OK"
+sudo -u switchboard npm run check-cdr -- 3601   # deve responder "✓ Conexão OK" e "✓ Gravações acessíveis"
 ```
 
 ## 6. Liberar a porta 8443 no firewall
@@ -236,6 +249,7 @@ O cadastro de usuários fica em `data/users.json` e não é afetado pela atualiz
 | Painel sem ramais ou sem nomes | Permissões `command` e `reporting` no usuário AMI; `HINT_CONTEXT=ext-local` |
 | Click-to-call não toca o ramal | `CHANNEL_TECH=PJSIP`; ramal registrado (`asterisk -rx "pjsip show contacts"`) |
 | Aba Histórico: "Não foi possível consultar" | A mensagem mostra a causa. Para diagnosticar pelo terminal: `cd /opt/switchboard_issabel && sudo -u switchboard npm run check-cdr -- <ramal>` (veja abaixo) |
+| Gravação não toca / "Arquivo não encontrado" | `sudo -u switchboard npm run check-cdr` mostra se os arquivos existem e se há permissão. Sem permissão: `usermod -aG asterisk switchboard && systemctl restart switchboard` |
 | Navegador mostra "Não seguro" | Esperado: o acesso é HTTP, sem certificado |
 | Login mostra "Usuário em uso" | O usuário está com o switchboard aberto em outro computador/navegador. Feche lá (ou clique em Sair), ou peça ao administrador para encerrar a sessão em *Usuários* |
 | Erro "Sua conexão não é particular" | O endereço foi digitado com `https://`; use `http://IP:8443` |
@@ -278,6 +292,7 @@ Depois de corrigir o `.env`, reinicie: `systemctl restart switchboard`.
 | `CDR_DB_HOST` / `CDR_DB_PORT` | — / `3306` | MariaDB do Issabel com o CDR (aba Histórico) |
 | `CDR_DB_SOCKET` | — | Socket local do MariaDB (alternativa ao TCP) |
 | `CDR_DB_USER` / `CDR_DB_PASSWORD` | — | Usuário somente leitura do CDR |
+| `RECORDINGS_DIR` | `/var/spool/asterisk/monitor` | Diretório das gravações do Issabel (aba Gravações) |
 | `CDR_DB_NAME` / `CDR_DB_TABLE` | `asteriskcdrdb` / `cdr` | Banco e tabela do CDR |
 | `SESSION_TTL_HOURS` | `12` | Duração da sessão |
 | `DATA_FILE` | `data/users.json` | Arquivo do cadastro de usuários |
@@ -310,6 +325,7 @@ server/
   index.js      servidor HTTP + WebSocket
   app.js        rotas da API (login, click-to-call, chamadas, histórico, usuários)
   cdr.js        histórico de ligações (MySQL do Issabel ou simulado)
+  recordings.js gravações (lista a partir do CDR e áudio de RECORDINGS_DIR)
   ami.js        cliente AMI (Asterisk Manager Interface)
   pbx.js        estado de ramais/chamadas a partir dos eventos do AMI
   mock-pbx.js   PABX simulado

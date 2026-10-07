@@ -18,7 +18,7 @@ function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
 
-function createApp({ config, users, pbx, cdr = null, sessions = new Sessions(users) }) {
+function createApp({ config, users, pbx, cdr = null, recordings = null, sessions = new Sessions(users) }) {
   const app = express();
   app.disable('x-powered-by');
   // Atrás de um proxy local (Apache/nginx): usa o IP real do cliente e o protocolo HTTPS informado pelo proxy
@@ -105,8 +105,15 @@ function createApp({ config, users, pbx, cdr = null, sessions = new Sessions(use
   // Histórico de ligações: sempre do ramal cadastrado do usuário logado
   app.get('/api/history', auth, async (req, res, next) => {
     try {
-      const extension = req.user.extension;
-      if (!extension) throw httpError(400, 'Seu usuário não possui ramal cadastrado.');
+      // Administrador pode consultar qualquer ramal; os demais, só o ramal do próprio cadastro
+      let extension = req.user.extension;
+      if (req.user.role === 'admin' && req.query.extension !== undefined) {
+        if (!/^\d{2,8}$/.test(String(req.query.extension))) throw httpError(400, 'Ramal inválido');
+        extension = String(req.query.extension);
+      }
+      if (!extension) {
+        throw httpError(400, req.user.role === 'admin' ? 'Selecione um ramal.' : 'Seu usuário não possui ramal cadastrado.');
+      }
       if (!cdr) throw httpError(503, 'Histórico indisponível: banco de CDR não configurado (CDR_DB_HOST).');
       const result = await cdr.history(extension, req.query);
       res.json({ extension, ...result });
@@ -117,6 +124,46 @@ function createApp({ config, users, pbx, cdr = null, sessions = new Sessions(use
         return next(httpError(502, `Não foi possível consultar o histórico: ${reason}.`));
       }
       next(err);
+    }
+  });
+
+  // Gravações de todos os ramais (somente administrador)
+  const cdrError = (err, next) => {
+    if (err.status) return next(err);
+    const reason = describeCdrError(err, cdr && cdr.dbConfig);
+    console.error('[gravações]', reason);
+    next(httpError(502, `Não foi possível consultar as gravações: ${reason}.`));
+  };
+  app.get('/api/recordings', auth, requireRole('admin'), async (req, res, next) => {
+    try {
+      if (!recordings) throw httpError(503, 'Gravações indisponíveis: banco de CDR não configurado (CDR_DB_HOST).');
+      res.json(await recordings.list(req.query));
+    } catch (err) {
+      cdrError(err, next);
+    }
+  });
+  app.get('/api/recordings/audio', auth, requireRole('admin'), async (req, res, next) => {
+    try {
+      if (!recordings) throw httpError(503, 'Gravações indisponíveis.');
+      const file = String(req.query.file || '');
+      const download = req.query.download === '1';
+      const name = path.basename(file).replace(/[^\w.\-]/g, '_');
+      if (download) res.attachment(name);
+      res.set('Cache-Control', 'private, max-age=3600');
+      if (recordings.demoAudio) {
+        const buf = recordings.demoAudio(file);
+        if (!buf) throw httpError(404, 'Arquivo da gravação não encontrado');
+        return res.type('audio/wav').send(buf);
+      }
+      const p = await recordings.audioPath(file);
+      if (!p) throw httpError(404, 'Arquivo da gravação não encontrado no servidor');
+      res.sendFile(p, { dotfiles: 'allow' }, (err) => {
+        if (err && !res.headersSent) next(err.code === 'EACCES'
+          ? httpError(403, 'Sem permissão para ler a gravação (adicione o usuário switchboard ao grupo asterisk)')
+          : err);
+      });
+    } catch (err) {
+      cdrError(err, next);
     }
   });
 

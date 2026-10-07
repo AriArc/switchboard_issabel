@@ -343,4 +343,4 @@ function describeCdrError(err, db = {}) {
   }
 }
 
-module.exports = { MysqlCdr, describeCdrError, MockCdr, shapeCalls, normalizeQuery, clidName };
+module.exports = { MysqlCdr, describeCdrError, MockCdr, shapeCalls, normalizeQuery, clidName, dialable, outPeerFallback };

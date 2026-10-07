@@ -86,6 +86,7 @@ button, input, select { font: inherit; color: inherit; }
 .btn-danger { background: color-mix(in srgb, var(--busy) 14%, var(--surface)); color: var(--busy); border-color: color-mix(in srgb, var(--busy) 30%, transparent); }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--surface-2); }
+a.btn { color: inherit; text-decoration: none; }
 .btn-icon { width: 36px; height: 36px; padding: 0; border-radius: 10px; }
 .btn-block { width: 100%; }
 
@@ -304,6 +305,8 @@ tr:last-child td { border-bottom: none; }
 .badge.st-answered { color: var(--ok); }
 .badge.st-missed, .badge.st-busy, .badge.st-failed { color: var(--busy); }
 .badge.st-noanswer { color: var(--muted); }
+.rec-audio { width: 260px; height: 36px; display: block; }
+.recordings td { vertical-align: middle; }
 .h-more { display: flex; justify-content: center; padding-top: 12px; }
 .h-more .btn[hidden] { display: none; }
 @media (max-width: 640px) {
@@ -325,6 +328,17 @@ tr:last-child td { border-bottom: none; }
   .history .contact span { display: inline; margin-left: 6px; }
   .history .contact b { display: inline; }
   .h-period { flex: 1; }
+  .history.recordings tr {
+    grid-template-columns: 1fr 1fr auto;
+    grid-template-areas: "from to dl" "date dur dl" "audio audio audio";
+  }
+  .history.recordings td:nth-child(1) { grid-area: date; color: var(--muted); }
+  .history.recordings td:nth-child(2) { grid-area: from; font-size: 14px; }
+  .history.recordings td:nth-child(3) { grid-area: to; font-size: 14px; min-width: 0; color: inherit; }
+  .history.recordings td:nth-child(4) { grid-area: dur; color: var(--muted); }
+  .history.recordings td:nth-child(5) { grid-area: audio; padding-top: 6px; }
+  .history.recordings td:nth-child(6) { grid-area: dl; }
+  .rec-audio { width: 100%; }
 }
 
 /* ---------- Modal ---------- */

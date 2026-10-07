@@ -5,6 +5,39 @@
 const config = require('./config');
 const { MysqlCdr, describeCdrError } = require('./cdr');
 
+const fs = require('fs');
+const { resolveRecording } = require('./recordings');
+
+// Confere se o switchboard consegue ler as gravações do Issabel (aba Gravações)
+async function checkRecordings(cdr) {
+  const dir = config.recordingsDir;
+  console.log(`Gravações em ${dir}…`);
+  try {
+    fs.accessSync(dir, fs.constants.R_OK | fs.constants.X_OK);
+  } catch (err) {
+    console.log(err.code === 'ENOENT'
+      ? '✗ Diretório não existe. Confira RECORDINGS_DIR no .env'
+      : `✗ Sem acesso ao diretório (${err.code}). Rode: usermod -aG asterisk switchboard && systemctl restart switchboard`);
+    return;
+  }
+  const [rows] = await cdr.pool.query(
+    `SELECT recordingfile, MIN(calldate) AS d FROM \`${cdr.table}\` WHERE recordingfile <> '' AND billsec > 0
+     AND calldate >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY recordingfile ORDER BY d DESC LIMIT 20`);
+  if (!rows.length) return console.log('  Nenhuma ligação gravada nos últimos 7 dias.');
+  let found = 0;
+  let readable = 0;
+  for (const r of rows) {
+    const p = resolveRecording(dir, r.recordingfile, r.d);
+    if (!p) continue;
+    found++;
+    try { fs.accessSync(p, fs.constants.R_OK); readable++; } catch { /* sem permissão */ }
+  }
+  console.log(`  ${rows.length} gravações recentes no CDR; ${found} arquivos encontrados; ${readable} com permissão de leitura.`);
+  if (found && readable < found) console.log('✗ Sem permissão para ler os arquivos. Rode: usermod -aG asterisk switchboard && systemctl restart switchboard');
+  else if (!found) console.log(`✗ Arquivos não encontrados. Confira RECORDINGS_DIR (ex.: ${rows[0].recordingfile} em ${dir}/AAAA/MM/DD/)`);
+  else console.log('✓ Gravações acessíveis');
+}
+
 (async () => {
   const db = config.cdrDb;
   if (!db) {
@@ -54,6 +87,7 @@ const { MysqlCdr, describeCdrError } = require('./cdr');
         }
       }
     }
+    await checkRecordings(cdr);
     process.exitCode = 0;
   } catch (err) {
     console.error(`✗ Falhou: ${describeCdrError(err, db)}`);
