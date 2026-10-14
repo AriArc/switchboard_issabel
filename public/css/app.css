@@ -428,3 +428,8 @@ tr:last-child td { border-bottom: none; }
 }
 .sp-keypad button:active { background: var(--lime-soft); }
 .sp-dock:not([hidden]) ~ .toasts { bottom: 230px; }
+
+.sp-dial-btn { height: 34px; padding: 0 14px; }
+.sp-dock.dial { border-top-color: var(--lime-strong); }
+.sp-number { height: 46px; text-align: center; font-size: 20px; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .sp-dial-btn span { display: none; } .sp-dial-btn { padding: 0 10px; } }

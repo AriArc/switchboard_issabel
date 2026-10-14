@@ -193,6 +193,9 @@ Em **Usuários → editar**, para cada pessoa que vai usar o navegador como tele
 
 - No topo da tela aparece **"Telefone: ramal 7000"** em verde quando o navegador está registrado.
 - Na primeira ligação o navegador pede permissão para usar o **microfone**: clique em *Permitir*.
+- **Discar qualquer número**: botão **Discar** no topo da tela (só aparece para quem usa o telefone no
+  navegador). Digite pelo teclado na tela ou pelo teclado do computador e clique em **Ligar** (ou Enter);
+  Esc fecha. Ramais também podem ser chamados clicando no card.
 - Ligação recebida: o painel no canto da tela toca e mostra **Atender / Recusar**, e o título da aba pisca.
 - Em ligação: **Mudo**, **Espera**, **Teclado** (DTMF para URAs; as teclas do computador também funcionam)
   e **Desligar**.

@@ -14,7 +14,7 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
   filtro por ramal, período e busca. Esses perfis também consultam o **histórico de qualquer ramal**
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
 - **Telefone no navegador (WebRTC), opcional**: para clientes sem telefone IP nem softphone, o switchboard
-  vira o telefone do ramal (tocar, atender, mudo, espera, teclado). Desligado por padrão; veja
+  vira o telefone do ramal (discar, tocar, atender, mudo, espera, teclado). Desligado por padrão; veja
   [docs/WEBRTC.md](docs/WEBRTC.md)
 - **Sessão única por usuário**: enquanto o switchboard estiver aberto num navegador, outro login com o mesmo
   usuário é recusado ("Usuário em uso"). Fechando a página, o usuário fica livre em até 45 segundos; o

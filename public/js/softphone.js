@@ -18,6 +18,7 @@
   let timer = null;
   let ringer = null;
   let titleBlink = null;
+  let dialOpen = false; // teclado de discagem aberto (sem ligação em andamento)
   const originalTitle = document.title;
 
   const SB = () => window.SB;
@@ -36,6 +37,7 @@
   dock.innerHTML = `
     <div class="sp-head"><span class="sp-state"></span><span class="sp-timer"></span></div>
     <div class="sp-peer"><b></b><small></small></div>
+    <input class="input sp-number" type="tel" inputmode="tel" autocomplete="off" placeholder="Número ou ramal" aria-label="Número para discar" hidden>
     <div class="sp-keypad" hidden></div>
     <div class="sp-actions"></div>`;
 
@@ -59,8 +61,56 @@
   const btn = (action, label, iconId, cls = '') =>
     `<button type="button" class="sp-btn ${cls}" data-sp="${action}" title="${label}" aria-label="${label}">${SB().icon(iconId)}<span>${label}</span></button>`;
 
+  // Teclado para discar qualquer número (o navegador é o telefone do usuário)
+  function renderDial() {
+    dock.className = 'sp-dock dial';
+    $('.sp-state', dock).textContent = 'Discar';
+    $('.sp-timer', dock).textContent = '';
+    $('.sp-peer', dock).hidden = true;
+    const input = $('.sp-number', dock);
+    input.hidden = false;
+    $('.sp-keypad', dock).hidden = false;
+    $('.sp-actions', dock).innerHTML = btn('dial', 'Ligar', 'phone', 'ok') + btn('close', 'Fechar', 'x');
+    dock.hidden = false;
+    input.focus();
+  }
+
+  function openDialer() {
+    if (session) {
+      // Em ligação: o botão abre o teclado de tons (DTMF)
+      $('.sp-keypad', dock).hidden = false;
+      return render(session.isOnHold().local ? 'held' : 'active');
+    }
+    dialOpen = true;
+    renderDial();
+  }
+
+  function closeDialer() {
+    dialOpen = false;
+    $('.sp-number', dock).value = '';
+    render();
+  }
+
+  function dialTyped() {
+    const number = $('.sp-number', dock).value.replace(/[\s().\-]/g, '');
+    if (!/^\+?[0-9*#]{2,32}$/.test(number)) {
+      SB().toast('Digite um número válido', 'err');
+      return $('.sp-number', dock).focus();
+    }
+    if (!ready()) return SB().toast('O telefone do navegador não está conectado', 'err');
+    dialOpen = false;
+    $('.sp-number', dock).value = '';
+    call(number);
+  }
+
   function render(state) {
-    if (!session) { dock.hidden = true; return; }
+    if (!session) {
+      if (dialOpen) return renderDial();
+      dock.hidden = true;
+      return;
+    }
+    $('.sp-peer', dock).hidden = false;
+    $('.sp-number', dock).hidden = true;
     const r = session.remote_identity;
     const number = (r && r.uri && r.uri.user) || '';
     const ext = SB().state.pbx.extensions.find((e) => e.exten === number);
@@ -154,6 +204,8 @@
       return;
     }
     session = s;
+    dialOpen = false; // uma ligação (feita ou recebida) fecha o teclado de discagem
+    $('.sp-number', dock).value = '';
     // Nas ligações feitas pelo navegador a conexão de mídia já existe quando a sessão é anunciada
     if (s.connection) attachMedia(s.connection);
     s.on('peerconnection', (e) => attachMedia(e.peerconnection));
@@ -226,6 +278,7 @@
       });
       ua.on('newRTCSession', ({ session: s, originator }) => onSession(s, originator));
       ua.start();
+      $('#sp-dial').hidden = false;
     } catch (err) {
       setStatus('off', 'Telefone: erro');
       SB().toast(err.message, 'err');
@@ -235,6 +288,9 @@
   }
 
   function stop() {
+    dialOpen = false;
+    const dialBtn = $('#sp-dial');
+    if (dialBtn) dialBtn.hidden = true;
     stopRing();
     clearInterval(timer);
     if (session) { try { session.terminate(); } catch { /* já encerrada */ } }
@@ -271,8 +327,19 @@
       session.sendDTMF(dtmf.dataset.dtmf, { transportType: 'RFC2833' });
       return;
     }
+    if (dtmf && dialOpen) {
+      const input = $('.sp-number', dock);
+      input.value += dtmf.dataset.dtmf;
+      input.focus();
+      return;
+    }
     const b = e.target.closest('[data-sp]');
-    if (!b || !session) return;
+    if (b && !session) {
+      if (b.dataset.sp === 'dial') dialTyped();
+      if (b.dataset.sp === 'close') closeDialer();
+      return;
+    }
+    if (!b) return;
     const action = b.dataset.sp;
     if (action === 'answer') { stopRing(); session.answer(mediaOptions()); }
     if (action === 'reject') session.terminate({ status_code: 603, reason_phrase: 'Decline' });
@@ -290,6 +357,15 @@
       pad.hidden = !pad.hidden;
       render(session.isOnHold().local ? 'held' : 'active');
     }
+  });
+
+  dock.addEventListener('keydown', (e) => {
+    if (!e.target.matches('.sp-number')) return;
+    if (e.key === 'Enter') { e.preventDefault(); dialTyped(); }
+    if (e.key === 'Escape') closeDialer();
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#sp-dial')) openDialer();
   });
 
   // Teclado do computador envia DTMF durante a ligação (ex.: menus de atendimento)
