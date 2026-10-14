@@ -33,21 +33,17 @@ o switchboard funciona exatamente como antes.
 
 ## 1. Certificado HTTPS para o IP público
 
-Troque `203.0.113.10` pelo IP público da VPS:
+Rode o script abaixo, trocando `203.0.113.10` pelo IP público da VPS:
 
 ```bash
-mkdir -p /opt/switchboard_issabel/certs && cd /opt/switchboard_issabel/certs
-IP=203.0.113.10
-openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
-  -subj "/CN=$IP/O=Intek Telecomunicacoes" \
-  -addext "subjectAltName=IP:$IP" \
-  -addext "basicConstraints=critical,CA:FALSE" \
-  -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
-  -addext "extendedKeyUsage=serverAuth" \
-  -keyout switchboard.key -out switchboard.crt
-chown -R switchboard:switchboard /opt/switchboard_issabel/certs
-chmod 600 switchboard.key
+cd /opt/switchboard_issabel
+sudo -u switchboard git pull
+sh deploy/gerar-certificado.sh 203.0.113.10
 ```
+
+O script cria `certs/switchboard.crt` e `certs/switchboard.key`, ajusta dono e permissões e confere o
+certificado. Não use `openssl req … -addext` direto: no OpenSSL 1.1.1 do Rocky Linux 8 esse comando
+gera extensões duplicadas, que o Chrome rejeita com `ERR_CERT_INVALID`.
 
 O navegador mostra um aviso de certificado. Cada usuário pode clicar em **Avançado → Continuar para o
 site** uma vez, ou você pode instalar o `switchboard.crt` nos computadores como confiável e o aviso some.
@@ -209,6 +205,7 @@ Em **Usuários → editar**, para cada pessoa que vai usar o navegador como tele
 | Indicador / sintoma | Causa provável |
 |---|---|
 | Navegador: `ERR_SSL_PROTOCOL_ERROR` em `https://IP:8443` | O switchboard está em **http**: o HTTPS não foi ativado. Confira `journalctl -u switchboard -n 20` — deve aparecer `Switchboard Intek em https://`; se aparecer `http://`, as linhas `HTTPS_CERT_FILE`/`HTTPS_KEY_FILE` não estão valendo no `.env` (comentadas com `#`, nome diferente ou versão antiga: rode `git pull`) e reinicie o serviço |
+| Navegador: `ERR_CERT_INVALID`, **sem** opção de continuar | Certificado malformado (extensões duplicadas do `openssl -addext` no OpenSSL 1.1.1). Gere de novo com `sh deploy/gerar-certificado.sh <IP>` e reinicie o serviço |
 | Serviço não sobe após configurar HTTPS | `journalctl -u switchboard` mostra `[https] não foi possível ler…`: caminho errado ou sem permissão no certificado (`chown -R switchboard:switchboard /opt/switchboard_issabel/certs`) |
 | "Telefone: requer HTTPS" | Acesso por `http://`. Configure o certificado (passos 1 e 3) e use `https://` |
 | "Telefone: senha SIP não cadastrada" | Informe a senha SIP no cadastro do usuário (passo 4) |
