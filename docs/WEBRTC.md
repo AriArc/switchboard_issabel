@@ -208,6 +208,8 @@ Em **Usuários → editar**, para cada pessoa que vai usar o navegador como tele
 
 | Indicador / sintoma | Causa provável |
 |---|---|
+| Navegador: `ERR_SSL_PROTOCOL_ERROR` em `https://IP:8443` | O switchboard está em **http**: o HTTPS não foi ativado. Confira `journalctl -u switchboard -n 20` — deve aparecer `Switchboard Intek em https://`; se aparecer `http://`, as linhas `HTTPS_CERT_FILE`/`HTTPS_KEY_FILE` não estão valendo no `.env` (comentadas com `#`, nome diferente ou versão antiga: rode `git pull`) e reinicie o serviço |
+| Serviço não sobe após configurar HTTPS | `journalctl -u switchboard` mostra `[https] não foi possível ler…`: caminho errado ou sem permissão no certificado (`chown -R switchboard:switchboard /opt/switchboard_issabel/certs`) |
 | "Telefone: requer HTTPS" | Acesso por `http://`. Configure o certificado (passos 1 e 3) e use `https://` |
 | "Telefone: senha SIP não cadastrada" | Informe a senha SIP no cadastro do usuário (passo 4) |
 | "Telefone: senha SIP incorreta" | Senha diferente do *secret* do ramal, **ou** o `chan_sip` capturando o WebSocket (passo 2.2). O log `/var/log/asterisk/full` mostra `chan_sip.c: Registration ... Wrong password` nesse segundo caso |

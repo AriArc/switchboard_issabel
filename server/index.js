@@ -32,13 +32,25 @@ if (config.mock) recordings = new MockRecordings(pbx);
 else if (cdr) recordings = new MysqlRecordings(cdr, config.recordingsDir);
 const sessions = new Sessions(users);
 const app = createApp({ config, users, pbx, cdr, recordings, sessions });
+// Lê o certificado com mensagem clara em caso de erro (caminho errado ou sem permissão)
+function readTls(file, label) {
+  try {
+    return fs.readFileSync(file);
+  } catch (err) {
+    console.error(`[https] não foi possível ler ${label} "${file}": ${err.code === 'EACCES'
+      ? 'sem permissão (rode: chown -R switchboard:switchboard /opt/switchboard_issabel/certs)'
+      : err.code === 'ENOENT' ? 'arquivo não encontrado' : err.message}`);
+    process.exit(1);
+  }
+}
+if (config.httpsPartial) console.warn('[https] defina HTTPS_CERT_FILE e HTTPS_KEY_FILE juntos no .env — HTTPS desativado');
 const server = config.https
-  ? https.createServer({ cert: fs.readFileSync(config.https.certFile), key: fs.readFileSync(config.https.keyFile) }, app)
+  ? https.createServer({ cert: readTls(config.https.certFile, 'o certificado (HTTPS_CERT_FILE)'), key: readTls(config.https.keyFile, 'a chave (HTTPS_KEY_FILE)') }, app)
   : http.createServer(app);
 const sipProxy = createSipProxy({ config, users, sessionFromRequest });
 if (config.webrtc.enabled) {
   console.log(`[webrtc] telefone no navegador habilitado (Asterisk em ${config.webrtc.asteriskWsUrl})`);
-  if (!config.https) console.warn('[webrtc] sem HTTPS_CERT_FILE/HTTPS_KEY_FILE o navegador não libera o microfone');
+  if (!config.https) console.warn('[webrtc] HTTPS desativado (HTTPS_CERT_FILE/HTTPS_KEY_FILE ausentes no .env): o switchboard está em http:// e o navegador não libera o microfone');
 }
 
 // Atualizações em tempo real do painel

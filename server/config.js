@@ -9,7 +9,7 @@ function loadDotEnv(file) {
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!m || line.trim().startsWith('#')) continue;
-    let value = m[2];
+    let value = m[2].trim(); // espaços sobrando no fim da linha não entram no valor
     if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
     if (process.env[m[1]] === undefined) process.env[m[1]] = value;
   }
@@ -51,8 +51,9 @@ module.exports = {
 
   // HTTPS opcional (obrigatório para o telefone no navegador/WebRTC: o navegador só libera o microfone em HTTPS)
   https: env.HTTPS_CERT_FILE && env.HTTPS_KEY_FILE
-    ? { certFile: env.HTTPS_CERT_FILE, keyFile: env.HTTPS_KEY_FILE }
+    ? { certFile: env.HTTPS_CERT_FILE.trim(), keyFile: env.HTTPS_KEY_FILE.trim() }
     : null,
+  httpsPartial: Boolean(env.HTTPS_CERT_FILE) !== Boolean(env.HTTPS_KEY_FILE),
 
   // Telefone no navegador (WebRTC) — desligado por padrão
   webrtc: {
