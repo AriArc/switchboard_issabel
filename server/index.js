@@ -1,6 +1,8 @@
 'use strict';
 
+const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const { WebSocketServer } = require('ws');
 const config = require('./config');
 const { UserStore } = require('./users');
@@ -11,8 +13,9 @@ const { MysqlCdr, MockCdr } = require('./cdr');
 const { MysqlRecordings, MockRecordings } = require('./recordings');
 const { sessionFromRequest } = require('./auth');
 const { Sessions } = require('./sessions');
+const { createSipProxy } = require('./sip-proxy');
 
-const users = new UserStore(config.dataFile);
+const users = new UserStore(config.dataFile, { secret: config.sessionSecret });
 const admin = users.ensureAdmin(config.admin);
 if (admin) console.log(`[users] administrador inicial criado: ${admin.username}`);
 if (config.sessionSecret === 'dev-secret-change-me') {
@@ -29,12 +32,21 @@ if (config.mock) recordings = new MockRecordings(pbx);
 else if (cdr) recordings = new MysqlRecordings(cdr, config.recordingsDir);
 const sessions = new Sessions(users);
 const app = createApp({ config, users, pbx, cdr, recordings, sessions });
-const server = http.createServer(app);
+const server = config.https
+  ? https.createServer({ cert: fs.readFileSync(config.https.certFile), key: fs.readFileSync(config.https.keyFile) }, app)
+  : http.createServer(app);
+const sipProxy = createSipProxy({ config, users, sessionFromRequest });
+if (config.webrtc.enabled) {
+  console.log(`[webrtc] telefone no navegador habilitado (Asterisk em ${config.webrtc.asteriskWsUrl})`);
+  if (!config.https) console.warn('[webrtc] sem HTTPS_CERT_FILE/HTTPS_KEY_FILE o navegador não libera o microfone');
+}
 
 // Atualizações em tempo real do painel
 const wss = new WebSocketServer({ noServer: true });
 server.on('upgrade', (req, socket, head) => {
-  if (new URL(req.url, 'http://x').pathname !== '/ws') return socket.destroy();
+  const pathname = new URL(req.url, 'http://x').pathname;
+  if (pathname === '/sip') return sipProxy.handleUpgrade(req, socket, head);
+  if (pathname !== '/ws') return socket.destroy();
   const session = sessionFromRequest(req, { secret: config.sessionSecret, users });
   if (!session) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -69,5 +81,6 @@ server.on('error', (err) => {
 
 pbx.start();
 server.listen(config.port, config.host, () => {
-  console.log(`Switchboard Intek em http://${config.host}:${config.port} ${config.mock ? '(PABX simulado)' : ''}`);
+  const proto = config.https ? 'https' : 'http';
+  console.log(`Switchboard Intek em ${proto}://${config.host}:${config.port} ${config.mock ? '(PABX simulado)' : ''}`);
 });

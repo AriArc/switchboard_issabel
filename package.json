@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "dev": "MOCK_PBX=1 node server/index.js",
     "test": "node --test test/*.test.js",
-    "check-cdr": "node server/check-cdr.js"
+    "check-cdr": "node server/check-cdr.js",
+    "build:vendor": "esbuild node_modules/jssip/lib/JsSIP.js --bundle --minify --format=iife --global-name=JsSIP --platform=browser --legal-comments=eof --outfile=public/vendor/jssip.min.js"
   },
   "engines": {
     "node": ">=18"
@@ -17,5 +18,9 @@
     "express": "^4.21.2",
     "mysql2": "^3.24.4",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "jssip": "^3.13.8"
   }
 }

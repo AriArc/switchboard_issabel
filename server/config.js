@@ -49,6 +49,23 @@ module.exports = {
       }
     : null,
 
+  // HTTPS opcional (obrigatório para o telefone no navegador/WebRTC: o navegador só libera o microfone em HTTPS)
+  https: env.HTTPS_CERT_FILE && env.HTTPS_KEY_FILE
+    ? { certFile: env.HTTPS_CERT_FILE, keyFile: env.HTTPS_KEY_FILE }
+    : null,
+
+  // Telefone no navegador (WebRTC) — desligado por padrão
+  webrtc: {
+    enabled: env.WEBRTC_ENABLED === '1' || env.WEBRTC_ENABLED === 'true',
+    // WebSocket SIP do Asterisk (http.conf + transporte PJSIP "ws"); acessado só pelo switchboard
+    asteriskWsUrl: env.WEBRTC_ASTERISK_WS || 'ws://127.0.0.1:8088/ws',
+    // Domínio SIP usado nos endereços (sip:<ramal>@<domínio>); vazio = endereço que o navegador acessou
+    domain: env.WEBRTC_SIP_DOMAIN || '',
+    // Servidores STUN para o navegador descobrir o próprio IP público (separados por vírgula; vazio = nenhum)
+    stun: (env.WEBRTC_STUN === undefined ? 'stun:stun.l.google.com:19302' : env.WEBRTC_STUN)
+      .split(',').map((s) => s.trim()).filter(Boolean),
+  },
+
   // Onde o Issabel guarda as gravações (subpastas AAAA/MM/DD)
   recordingsDir: env.RECORDINGS_DIR || '/var/spool/asterisk/monitor',
 

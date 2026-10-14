@@ -65,6 +65,7 @@
 
   // ---------- Sessão ----------
   function showLogin(message = '') {
+    if (window.Softphone) window.Softphone.stop();
     if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
     state.me = null;
     $('#login-error').textContent = message;
@@ -92,6 +93,11 @@
     hist.ext = me.extension || '';
     $('#h-ext').textContent = me.extension || '—';
     connectWs();
+    // Telefone no navegador (WebRTC), quando habilitado no servidor e no cadastro do usuário
+    if (window.Softphone) {
+      if (state.features && state.features.webrtc && me.webrtc) window.Softphone.start();
+      else window.Softphone.stop();
+    }
     route();
     handleCallParam();
   }
@@ -100,12 +106,13 @@
     e.preventDefault();
     $('#login-error').textContent = '';
     try {
-      const { user } = await api('POST', '/api/login', {
+      const { user, features } = await api('POST', '/api/login', {
         username: $('#login-user').value.trim(),
         password: $('#login-pass').value,
       });
       $('#login-pass').value = '';
       state.me = user;
+      state.features = features || {};
       // Perfil "Usuário" sempre entra direto no painel do switchboard
       if (user.role === 'user') history.replaceState(null, '', `${location.pathname}${location.search}#painel`);
       showApp();
@@ -263,6 +270,8 @@
   async function clickToCall(number) {
     number = String(number || '').trim();
     if (!number || dialing.has(number)) return;
+    // Com o telefone do navegador registrado, a ligação sai direto dele (sem tocar o ramal antes)
+    if (window.Softphone && window.Softphone.ready()) return window.Softphone.call(number);
     dialing.add(number);
     try {
       const res = await api('POST', '/api/call', { number });
@@ -382,7 +391,10 @@
       $('#u-extension').value = user.extension || '';
       $('#u-role').value = user.role;
       $('#u-active').checked = user.active;
+      $('#u-webrtc').checked = Boolean(user.webrtc);
     }
+    $('#u-webrtc-block').hidden = !(state.features && state.features.webrtc);
+    $('#u-sippass').placeholder = user && user.hasSipPassword ? 'Cadastrada — deixe em branco para manter' : 'Senha SIP do ramal no Issabel';
     $('#user-modal').hidden = false;
     $('#u-name').focus();
   }
@@ -427,6 +439,10 @@
       role: $('#u-role').value,
       active: $('#u-active').checked,
     };
+    if (state.features && state.features.webrtc) {
+      body.webrtc = $('#u-webrtc').checked;
+      if ($('#u-sippass').value) body.sipPassword = $('#u-sippass').value;
+    }
     const pwd = $('#u-password').value;
     if (pwd) body.password = pwd;
     try {
@@ -681,8 +697,11 @@
     try { localStorage.setItem('sb-theme', next); } catch { /* ignora */ }
   });
 
+  // Utilidades compartilhadas com o telefone do navegador (js/softphone.js)
+  window.SB = { api, toast, esc, icon, fmtDuration, state };
+
   // ---------- Início ----------
   api('GET', '/api/me')
-    .then(({ user }) => { state.me = user; showApp(); })
+    .then(({ user, features }) => { state.me = user; state.features = features || {}; showApp(); })
     .catch(() => showLogin());
 })();

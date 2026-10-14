@@ -386,3 +386,45 @@ tr:last-child td { border-bottom: none; }
   .mc { flex: 1 1 100%; }
   .mc-peer { max-width: none; flex: 1; }
 }
+
+/* ---------- Telefone no navegador (WebRTC) ---------- */
+.sp-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 6px 10px;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--border); white-space: nowrap;
+}
+.sp-pill .icon { width: 14px; height: 14px; }
+.sp-pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.sp-pill.wait { color: var(--ring); }
+.sp-pill.off { color: var(--busy); border-color: color-mix(in srgb, var(--busy) 35%, var(--border)); }
+.webrtc-block { border: 1px dashed var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; display: grid; gap: 10px; }
+.webrtc-block .field { margin-bottom: 0; }
+
+.sp-dock {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 300px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 12px 40px rgba(15, 26, 24, .25);
+  padding: 14px; display: grid; gap: 10px; border-top: 4px solid var(--teal);
+}
+.sp-dock.incoming { border-top-color: var(--ring); animation: sp-pulse 1.2s ease-in-out infinite; }
+.sp-dock.active { border-top-color: var(--ok); }
+.sp-dock.held { border-top-color: var(--hold); }
+@keyframes sp-pulse { 50% { box-shadow: 0 12px 40px rgba(15, 26, 24, .25), 0 0 0 6px color-mix(in srgb, var(--ring) 25%, transparent); } }
+.sp-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.sp-timer { font-variant-numeric: tabular-nums; }
+.sp-peer b { display: block; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-peer small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.sp-actions { display: flex; gap: 6px; }
+.sp-btn {
+  flex: 1; display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; font-weight: 600;
+}
+.sp-btn .icon { width: 18px; height: 18px; }
+.sp-btn.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); }
+.sp-btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.sp-btn.danger { background: var(--busy); border-color: var(--busy); color: #fff; }
+.sp-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sp-keypad button {
+  height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2);
+  font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.sp-keypad button:active { background: var(--lime-soft); }
+.sp-dock:not([hidden]) ~ .toasts { bottom: 230px; }

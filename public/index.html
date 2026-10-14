@@ -16,6 +16,10 @@
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-headset" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="M2 2l20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.7M17 16.9A7 7 0 0 1 5 11M19 11a7 7 0 0 1-.1 1.2M12 18v4M8 22h8"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-dialpad" viewBox="0 0 24 24"><circle cx="6" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="18" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/><circle cx="12" cy="11" r="1.5"/><circle cx="18" cy="11" r="1.5"/><circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="17" r="1.5"/><circle cx="18" cy="17" r="1.5"/><circle cx="12" cy="22" r="1"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
@@ -88,6 +92,7 @@
         <h2 id="view-title">Painel</h2>
         <div class="my-calls" id="my-calls" aria-live="polite" hidden></div>
         <div class="grow"></div>
+        <span class="sp-pill" id="sp-status" hidden><svg class="icon"><use href="#i-headset"/></svg><span class="txt"></span></span>
         <span class="conn" id="conn"><span class="dot"></span><span class="txt">Conectando…</span></span>
         <button class="btn btn-icon btn-ghost" id="theme-btn" type="button" aria-label="Alternar tema"><svg class="icon"><use href="#i-moon"/></svg></button>
       </header>
@@ -236,6 +241,14 @@
           </div>
         </div>
         <p class="hint">O click-to-call deste usuário sempre usará o ramal discador cadastrado aqui.</p>
+        <div id="u-webrtc-block" class="webrtc-block" hidden>
+          <label class="switch"><input type="checkbox" id="u-webrtc" name="webrtc"> Telefone no navegador (WebRTC)</label>
+          <div class="field">
+            <label for="u-sippass">Senha SIP do ramal</label>
+            <input class="input" id="u-sippass" name="sipPassword" type="password" autocomplete="new-password">
+          </div>
+          <p class="hint">Para quem não usa telefone IP nem softphone: o próprio switchboard vira o telefone do ramal. A senha é a mesma do ramal no Issabel (campo "secret"), guardada criptografada.</p>
+        </div>
         <label class="switch"><input type="checkbox" id="u-active" name="active" checked> Usuário ativo</label>
         <div class="error-text" id="user-error"></div>
       </div>
@@ -262,6 +275,7 @@
   </div>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="js/softphone.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

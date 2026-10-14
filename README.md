@@ -13,6 +13,9 @@ Mesa operadora (switchboard) web para PABX **Issabel/Asterisk**, com a identidad
 - **Gravações** (supervisor e administrador): aba com as gravações de todos os ramais, com player, download,
   filtro por ramal, período e busca. Esses perfis também consultam o **histórico de qualquer ramal**
 - Usuários do perfil **Usuário** entram sempre direto no painel do switchboard
+- **Telefone no navegador (WebRTC), opcional**: para clientes sem telefone IP nem softphone, o switchboard
+  vira o telefone do ramal (tocar, atender, mudo, espera, teclado). Desligado por padrão; veja
+  [docs/WEBRTC.md](docs/WEBRTC.md)
 - **Sessão única por usuário**: enquanto o switchboard estiver aberto num navegador, outro login com o mesmo
   usuário é recusado ("Usuário em uso"). Fechando a página, o usuário fica livre em até 45 segundos; o
   administrador vê quem está online em *Usuários* e pode encerrar uma sessão
@@ -301,6 +304,11 @@ Depois de corrigir o `.env`, reinicie: `systemctl restart switchboard`.
 | `CDR_DB_HOST` / `CDR_DB_PORT` | — / `3306` | MariaDB do Issabel com o CDR (aba Histórico) |
 | `CDR_DB_SOCKET` | — | Socket local do MariaDB (alternativa ao TCP) |
 | `CDR_DB_USER` / `CDR_DB_PASSWORD` | — | Usuário somente leitura do CDR |
+| `HTTPS_CERT_FILE` / `HTTPS_KEY_FILE` | — | Certificado e chave para servir em HTTPS (obrigatório para WebRTC) |
+| `WEBRTC_ENABLED` | `0` | `1` habilita o telefone no navegador ([docs/WEBRTC.md](docs/WEBRTC.md)) |
+| `WEBRTC_ASTERISK_WS` | `ws://127.0.0.1:8088/ws` | WebSocket SIP do Asterisk (acessado só pelo switchboard) |
+| `WEBRTC_STUN` | `stun:stun.l.google.com:19302` | Servidores STUN para o navegador (vírgula; vazio = nenhum) |
+| `WEBRTC_SIP_DOMAIN` | endereço acessado | Domínio SIP dos endereços `sip:<ramal>@<domínio>` |
 | `RECORDINGS_DIR` | `/var/spool/asterisk/monitor` | Diretório das gravações do Issabel (aba Gravações) |
 | `CDR_DB_NAME` / `CDR_DB_TABLE` | `asteriskcdrdb` / `cdr` | Banco e tabela do CDR |
 | `SESSION_TTL_HOURS` | `12` | Duração da sessão |
@@ -340,8 +348,11 @@ server/
   mock-pbx.js   PABX simulado
   users.js      cadastro de usuários (JSON) com hash scrypt
   auth.js       sessão por cookie assinado (HMAC)
-public/         interface web (HTML/CSS/JS, sem build)
+  sip-proxy.js  repasse SIP/WebSocket navegador ↔ Asterisk (WebRTC, opcional)
+public/         interface web (HTML/CSS/JS, sem build); js/softphone.js = telefone no navegador
+  vendor/       JsSIP empacotado (gerado com `npm run build:vendor`)
 deploy/         serviço systemd
+docs/           WEBRTC.md: guia do telefone no navegador
 test/           testes (node:test)
 ```
 

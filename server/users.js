@@ -24,9 +24,34 @@ function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(expected, actual);
 }
 
+// Senha SIP do ramal (WebRTC) guardada criptografada com AES-256-GCM, chave derivada do SESSION_SECRET
+function sipKey(secret) {
+  return crypto.scryptSync(String(secret || 'switchboard'), 'switchboard-sip-password', 32);
+}
+
+function encryptSecret(plain, secret) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', sipKey(secret), iv);
+  const data = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+  return `gcm$${iv.toString('base64')}$${cipher.getAuthTag().toString('base64')}$${data.toString('base64')}`;
+}
+
+function decryptSecret(stored, secret) {
+  try {
+    const [algo, iv, tag, data] = String(stored || '').split('$');
+    if (algo !== 'gcm') return null;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', sipKey(secret), Buffer.from(iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
+  } catch {
+    return null; // SESSION_SECRET trocado ou dado corrompido: senha precisa ser cadastrada de novo
+  }
+}
+
 /** Cadastro de usuários em arquivo JSON. Cada usuário tem um ramal discador associado. */
 class UserStore {
-  constructor(file) {
+  constructor(file, { secret } = {}) {
+    this.secret = secret;
     this.file = file;
     this.users = [];
     this.load();
@@ -96,6 +121,12 @@ class UserStore {
         errors.push(`Ramal ${ext} já está associado a outro usuário`);
       }
     }
+    // WebRTC (telefone no navegador) precisa de ramal; a senha SIP pode ser cadastrada depois
+    const cur = (id && this.get(id)) || {};
+    const webrtc = has('webrtc') ? Boolean(data.webrtc) : Boolean(cur.webrtc);
+    const ext = has('extension') ? String(data.extension || '') : cur.extension;
+    if (webrtc && !ext) errors.push('Telefone no navegador (WebRTC) exige um ramal discador');
+    if (has('sipPassword') && data.sipPassword && String(data.sipPassword).length > 128) errors.push('Senha SIP muito longa');
     return errors;
   }
 
@@ -110,6 +141,8 @@ class UserStore {
       extension: String(data.extension || ''),
       role: data.role,
       active: data.active !== false,
+      webrtc: Boolean(data.webrtc),
+      sipPasswordEnc: data.sipPassword ? encryptSecret(data.sipPassword, this.secret) : null,
       createdAt: new Date().toISOString(),
     };
     this.users.push(user);
@@ -128,9 +161,18 @@ class UserStore {
     if (data.extension !== undefined) user.extension = String(data.extension);
     if (data.role !== undefined) user.role = data.role;
     if (data.active !== undefined) user.active = Boolean(data.active);
+    if (data.webrtc !== undefined) user.webrtc = Boolean(data.webrtc);
+    // Senha SIP: só troca quando informada (campo vazio mantém a atual)
+    if (data.sipPassword) user.sipPasswordEnc = encryptSecret(data.sipPassword, this.secret);
     this._assertAdminRemains();
     this.save();
     return publicUser(user);
+  }
+
+  /** Senha SIP do ramal (para o telefone no navegador), ou null. */
+  sipPassword(id) {
+    const user = this.get(id);
+    return user && user.sipPasswordEnc ? decryptSecret(user.sipPasswordEnc, this.secret) : null;
   }
 
   setSession(id, sessionId) {
@@ -162,8 +204,8 @@ class UserStore {
 }
 
 function publicUser(u) {
-  const { passwordHash, sessionId, ...rest } = u;
-  return rest;
+  const { passwordHash, sessionId, sipPasswordEnc, ...rest } = u;
+  return { ...rest, webrtc: Boolean(u.webrtc), hasSipPassword: Boolean(sipPasswordEnc) };
 }
 
 module.exports = { UserStore, ROLES, SUPERVISOR_ROLES, hashPassword, verifyPassword, publicUser };

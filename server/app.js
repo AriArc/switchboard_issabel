@@ -71,7 +71,7 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
     const maxAgeSec = config.sessionTtlHours * 3600;
     const token = sign({ uid: user.id, sid, exp: Date.now() + maxAgeSec * 1000 }, config.sessionSecret);
     res.set('Set-Cookie', sessionCookie(token, { maxAgeSec, secure: req.secure }));
-    res.json({ user: publicUser(user) });
+    res.json({ user: publicUser(user), features: { webrtc: Boolean(config.webrtc && config.webrtc.enabled) } });
   });
 
   app.post('/api/logout', (req, res) => {
@@ -81,7 +81,26 @@ function createApp({ config, users, pbx, cdr = null, recordings = null, sessions
     res.json({ ok: true });
   });
 
-  app.get('/api/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
+  app.get('/api/me', auth, (req, res) =>
+    res.json({ user: publicUser(req.user), features: { webrtc: Boolean(config.webrtc && config.webrtc.enabled) } }));
+
+  // Configuração do telefone no navegador (WebRTC) do próprio usuário
+  app.get('/api/webrtc', auth, (req, res) => {
+    const w = config.webrtc || {};
+    const u = req.user;
+    if (!w.enabled || !u.webrtc || !u.extension) return res.json({ enabled: false });
+    const password = users.sipPassword(u.id);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      enabled: true,
+      secure: req.secure,
+      extension: u.extension,
+      displayName: u.name,
+      password: password || null,
+      domain: w.domain || null,
+      stun: w.stun || [],
+    });
+  });
 
   app.get('/api/state', auth, (req, res) => res.json(pbx.snapshot()));
 
